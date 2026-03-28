@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Data and Models (We don't push large binaries to Git)
+data/raw/*
+data/processed/*
+models/*.pkl
+models/*.joblib
+
+# OS
+.DS_Store
