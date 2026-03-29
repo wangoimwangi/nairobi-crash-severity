@@ -1,0 +1,91 @@
+{
+    "cv_method": "RepeatedStratifiedKFold",
+    "n_splits": 5,
+    "n_repeats": 3,
+    "n_observations": 15,
+    "thresholds_used": {
+        "Logistic Regression": 0.4,
+        "Balanced Random Forest": 0.4,
+        "XGBoost": 0.55
+    },
+    "cv_mean_scores": {
+        "Logistic Regression": {
+            "recall": 0.926,
+            "precision": 0.161,
+            "f1": 0.275,
+            "f2": 0.475,
+            "roc_auc": 0.61
+        },
+        "Balanced Random Forest": {
+            "recall": 0.87,
+            "precision": 0.176,
+            "f1": 0.293,
+            "f2": 0.486,
+            "roc_auc": 0.662
+        },
+        "XGBoost": {
+            "recall": 0.93,
+            "precision": 0.163,
+            "f1": 0.278,
+            "f2": 0.48,
+            "roc_auc": 0.611
+        }
+    },
+    "cv_std_scores": {
+        "Logistic Regression": {
+            "recall": 0.02,
+            "precision": 0.002,
+            "f1": 0.004,
+            "f2": 0.007,
+            "roc_auc": 0.018
+        },
+        "Balanced Random Forest": {
+            "recall": 0.023,
+            "precision": 0.005,
+            "f1": 0.007,
+            "f2": 0.012,
+            "roc_auc": 0.019
+        },
+        "XGBoost": {
+            "recall": 0.024,
+            "precision": 0.003,
+            "f1": 0.005,
+            "f2": 0.008,
+            "roc_auc": 0.017
+        }
+    },
+    "friedman_results": {
+        "Recall": {
+            "statistic": 22.8814,
+            "p_value": 0.0,
+            "significant": true
+        },
+        "Precision": {
+            "statistic": 23.3333,
+            "p_value": 0.0,
+            "significant": true
+        },
+        "F1": {
+            "statistic": 20.8,
+            "p_value": 0.0,
+            "significant": true
+        },
+        "F2": {
+            "statistic": 7.6,
+            "p_value": 0.0224,
+            "significant": true
+        },
+        "ROC AUC": {
+            "statistic": 24.1333,
+            "p_value": 0.0,
+            "significant": true
+        }
+    },
+    "champion_model": "Balanced Random Forest",
+    "champion_rationale": {
+        "vs_LR": "Significant on all 5 metrics (p<0.0167)",
+        "vs_XGBoost": "Significant on 4 of 5 metrics (p<0.0167)",
+        "best_roc_auc": 0.662,
+        "best_precision": 0.176
+    }
+}

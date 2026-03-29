@@ -1,0 +1,76 @@
+{
+    "test_results": {
+        "Logistic Regression": {
+            "Recall": 0.891,
+            "Precision": 0.161,
+            "F1": 0.272,
+            "F2": 0.467,
+            "ROC_AUC": 0.587,
+            "Avg_Precision": 0.215,
+            "Threshold": 0.4
+        },
+        "Balanced Random Forest": {
+            "Recall": 0.916,
+            "Precision": 0.192,
+            "F1": 0.318,
+            "F2": 0.523,
+            "ROC_AUC": 0.698,
+            "Avg_Precision": 0.319,
+            "Threshold": 0.4
+        },
+        "XGBoost": {
+            "Recall": 0.94,
+            "Precision": 0.163,
+            "F1": 0.278,
+            "F2": 0.481,
+            "ROC_AUC": 0.624,
+            "Avg_Precision": 0.262,
+            "Threshold": 0.55
+        }
+    },
+    "confusion_matrices": {
+        "Logistic Regression": {
+            "TP": 254,
+            "FN": 31,
+            "FP": 1327,
+            "TN": 236,
+            "under_triage_pct": 10.9,
+            "dispatch_ratio": 5.2
+        },
+        "Balanced Random Forest": {
+            "TP": 261,
+            "FN": 24,
+            "FP": 1095,
+            "TN": 468,
+            "under_triage_pct": 8.4,
+            "dispatch_ratio": 4.2
+        },
+        "XGBoost": {
+            "TP": 268,
+            "FN": 17,
+            "FP": 1378,
+            "TN": 185,
+            "under_triage_pct": 6.0,
+            "dispatch_ratio": 5.1
+        }
+    },
+    "tiered_response": {
+        "tier1_count": 16,
+        "tier2_count": 1340,
+        "tier3_count": 492,
+        "tier1_pct": 0.9,
+        "tier2_pct": 72.5,
+        "tier3_pct": 26.6
+    },
+    "champion_model": "Balanced Random Forest",
+    "key_findings": {
+        "under_triage_rate": "8.4%",
+        "over_triage_rate": "73.4%",
+        "dispatch_ratio": "4.2x",
+        "avg_precision_improvement": "+107.1% above base rate",
+        "roc_auc": 0.698,
+        "tp_count": 261,
+        "fn_count": 24,
+        "total_high_severity": 285
+    }
+}

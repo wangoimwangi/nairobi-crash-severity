@@ -1,0 +1,155 @@
+{
+    "optimal_thresholds": {
+        "Logistic Regression": 0.4,
+        "Balanced Random Forest": 0.4,
+        "XGBoost": 0.55
+    },
+    "validation_results": {
+        "Logistic Regression": {
+            "Recall": 0.919,
+            "Precision": 0.163,
+            "F1": 0.276,
+            "F2": 0.476,
+            "ROC_AUC": 0.603,
+            "Threshold": 0.4
+        },
+        "Balanced Random Forest": {
+            "Recall": 0.867,
+            "Precision": 0.185,
+            "F1": 0.305,
+            "F2": 0.499,
+            "ROC_AUC": 0.688,
+            "Threshold": 0.4
+        },
+        "XGBoost": {
+            "Recall": 0.933,
+            "Precision": 0.162,
+            "F1": 0.276,
+            "F2": 0.477,
+            "ROC_AUC": 0.632,
+            "Threshold": 0.55
+        }
+    },
+    "cv_results": {
+        "Logistic Regression": {
+            "recall": 0.607,
+            "params": "{'classifier__C': 0.01, 'classifier__penalty': 'l1', 'classifier__solver': 'saga'}"
+        },
+        "Balanced Random Forest": {
+            "recall": 0.626,
+            "params": "{'classifier__n_estimators': 200, 'classifier__min_samples_split': 5, 'classifier__min_samples_leaf': 2, 'classifier__max_features': 'sqrt', 'classifier__max_depth': None}"
+        },
+        "XGBoost": {
+            "recall": 0.966,
+            "params": "{'classifier__colsample_bytree': 0.6, 'classifier__learning_rate': 0.03, 'classifier__max_depth': 3, 'classifier__n_estimators': 100, 'classifier__subsample': 0.8}"
+        }
+    },
+    "feature_info": {
+        "total_after_ohe": 184,
+        "selected_by_sfm": 40,
+        "cat_cols": [
+            "Day_of_week",
+            "Age_band_of_driver",
+            "Sex_of_driver",
+            "Educational_level",
+            "Vehicle_driver_relation",
+            "Driving_experience",
+            "Type_of_vehicle",
+            "Owner_of_vehicle",
+            "Service_year_of_vehicle",
+            "Defect_of_vehicle",
+            "Area_accident_occured",
+            "Lanes_or_Medians",
+            "Road_allignment",
+            "Types_of_Junction",
+            "Road_surface_type",
+            "Road_surface_conditions",
+            "Light_conditions",
+            "Weather_conditions",
+            "Type_of_collision",
+            "Vehicle_movement",
+            "Pedestrian_movement",
+            "Cause_of_accident"
+        ],
+        "num_cols": [
+            "Number_of_vehicles_involved",
+            "Number_of_casualties",
+            "Is_night",
+            "Is_rush_hour",
+            "Is_weekend"
+        ],
+        "selected_features": [
+            "Day_of_week_Monday",
+            "Day_of_week_Saturday",
+            "Day_of_week_Sunday",
+            "Day_of_week_Tuesday",
+            "Day_of_week_Wednesday",
+            "Age_band_of_driver_Under 18",
+            "Age_band_of_driver_Unknown",
+            "Sex_of_driver_Female",
+            "Sex_of_driver_Male",
+            "Educational_level_Above high school",
+            "Educational_level_Elementary school",
+            "Vehicle_driver_relation_Owner",
+            "Driving_experience_Below 1yr",
+            "Type_of_vehicle_Long lorry",
+            "Type_of_vehicle_Lorry (11?40Q)",
+            "Type_of_vehicle_Lorry (41?100Q)",
+            "Type_of_vehicle_Motorcycle",
+            "Type_of_vehicle_Taxi",
+            "Type_of_vehicle_Unknown",
+            "Owner_of_vehicle_Governmental",
+            "Owner_of_vehicle_Organization",
+            "Service_year_of_vehicle_2-5yrs",
+            "Service_year_of_vehicle_Above 10yr",
+            "Defect_of_vehicle_Unknown",
+            "Area_accident_occured_Office areas",
+            "Area_accident_occured_Outside rural areas",
+            "Area_accident_occured_Recreational areas",
+            "Area_accident_occured_Residential areas",
+            "Lanes_or_Medians_other",
+            "Road_allignment_Gentle horizontal curve",
+            "Types_of_Junction_Crossing",
+            "Types_of_Junction_No junction",
+            "Types_of_Junction_O Shape",
+            "Types_of_Junction_Other",
+            "Types_of_Junction_Unknown",
+            "Types_of_Junction_Y Shape",
+            "Road_surface_conditions_Dry",
+            "Road_surface_conditions_Wet or damp",
+            "Light_conditions_Darkness - lights lit",
+            "Light_conditions_Darkness - no lighting",
+            "Light_conditions_Daylight",
+            "Weather_conditions_Normal",
+            "Weather_conditions_Raining",
+            "Weather_conditions_Unknown",
+            "Type_of_collision_Collision with pedestrians",
+            "Type_of_collision_Collision with roadside objects",
+            "Type_of_collision_Unknown",
+            "Vehicle_movement_Reversing",
+            "Vehicle_movement_Unknown",
+            "Pedestrian_movement_Crossing from driver's nearside",
+            "Cause_of_accident_Driving to the left",
+            "Cause_of_accident_Moving Backward",
+            "Cause_of_accident_No distancing",
+            "Cause_of_accident_No priority to pedestrian",
+            "Cause_of_accident_Overloading",
+            "Cause_of_accident_Overtaking",
+            "Number_of_vehicles_involved",
+            "Number_of_casualties",
+            "Is_night",
+            "Is_weekend"
+        ]
+    },
+    "data_info": {
+        "train_rows": 8621,
+        "val_rows": 1847,
+        "test_rows": 1848,
+        "class_balance": {
+            "high_severity_pct": 15.4,
+            "low_severity_pct": 84.6,
+            "imbalance_ratio": 5.48
+        }
+    },
+    "seed": 42
+}
