@@ -1,13 +1,14 @@
 # ============================================================
+# app.py
 # Accident Severity Classification System
-# Emergency Dispatch Decision Support - Nairobi
+# Emergency Dispatch Decision Support — Nairobi
 # Streamlit web application
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from predictor import predict, get_temporal_features
+from predictor import predict, get_temporal_features, get_weather_conditions
 from hospitals import get_addis_area, get_hospitals
 
 # ---- Page configuration ----
@@ -18,7 +19,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-
 # ---- Custom CSS ----
 st.markdown("""
 <style>
@@ -27,6 +27,7 @@ st.markdown("""
         padding: 1rem 1.5rem;
         border-radius: 8px;
         margin-bottom: 1.5rem;
+        border: 1px solid #2d3748;
     }
     .main-header h1 {
         color: #ffffff;
@@ -39,36 +40,36 @@ st.markdown("""
         font-size: 0.9rem;
     }
     .auto-info {
-        background-color: #f0f4f8;
+        background-color: #1a202c;
         border-left: 4px solid #4a90e2;
         padding: 0.6rem 1rem;
         border-radius: 4px;
         font-size: 0.85rem;
-        color: #4a5568;
+        color: #a0aec0;
         margin-bottom: 1rem;
     }
     .result-high {
-        background-color: #fff5f5;
+        background-color: #2d1515;
         border: 2px solid #fc8181;
         border-radius: 10px;
         padding: 1.5rem;
         text-align: center;
     }
     .result-low {
-        background-color: #f0fff4;
+        background-color: #1a2d1a;
         border: 2px solid #68d391;
         border-radius: 10px;
         padding: 1.5rem;
         text-align: center;
     }
     .severity-text-high {
-        color: #c53030;
+        color: #fc8181;
         font-size: 2rem;
         font-weight: 800;
         margin: 0;
     }
     .severity-text-low {
-        color: #276749;
+        color: #68d391;
         font-size: 2rem;
         font-weight: 800;
         margin: 0;
@@ -77,90 +78,81 @@ st.markdown("""
         font-size: 1rem;
         font-weight: 600;
         margin-top: 0.5rem;
-        color: #2d3748;
+        color: #e2e8f0;
     }
     .confidence-text {
-        color: #718096;
+        color: #a0aec0;
         font-size: 0.9rem;
         margin-top: 0.3rem;
     }
     .hospital-box {
-        background-color: #ebf8ff;
-        border: 1px solid #bee3f8;
+        background-color: #1a2d3d;
+        border: 1px solid #2b6cb0;
         border-radius: 8px;
         padding: 0.8rem 1rem;
         margin-top: 1rem;
-    }
-    .classify-btn > button {
-        width: 100%;
-        background-color: #2b6cb0;
-        color: white;
-        font-size: 1.1rem;
-        font-weight: 700;
-        padding: 0.75rem;
-        border-radius: 8px;
-        border: none;
-        margin-top: 1rem;
-    }
-    .history-table {
-        font-size: 0.85rem;
+        color: #bee3f8;
     }
 </style>
 """, unsafe_allow_html=True)
-
-
 
 # ---- Initialise session state ----
 if 'history' not in st.session_state:
     st.session_state.history = []
 
-
-
 # ---- Header ----
 st.markdown("""
 <div class="main-header">
-    <h1> Accident Severity Classification System</h1>
+    <h1>🚨 Accident Severity Classification System</h1>
     <p>Emergency Dispatch Decision Support — Nairobi County</p>
 </div>
 """, unsafe_allow_html=True)
 
-
-
 # ---- Auto-filled info bar ----
-temporal   = get_temporal_features()
-now        = datetime.now()
-time_str   = now.strftime("%H:%M")
-day_str    = now.strftime("%A, %d %B %Y")
+temporal      = get_temporal_features()
+current_weather = get_weather_conditions()
+now           = datetime.now()
+time_str      = now.strftime("%H:%M")
+day_str       = now.strftime("%A, %d %B %Y")
+
 auto_flags = []
 if temporal['Is_night']:
-    auto_flags.append(" Night time")
+    auto_flags.append("🌙 Night time")
 if temporal['Is_rush_hour']:
-    auto_flags.append(" Rush hour")
+    auto_flags.append("🚗 Rush hour")
 if temporal['Is_weekend']:
-    auto_flags.append(" Weekend")
+    auto_flags.append("📅 Weekend")
 
-flag_str = " · ".join(auto_flags) if auto_flags else "Normal conditions"
+weather_emoji = {
+    'Raining'    : '🌧️ Raining',
+    'Cloudy'     : '☁️ Cloudy',
+    'Fog or mist': '🌫️ Foggy',
+    'Normal'     : '☀️ Clear'
+}.get(current_weather, '☀️ Clear')
+
+auto_flags.append(weather_emoji)
+flag_str = " · ".join(auto_flags)
+
 st.markdown(f"""
 <div class="auto-info">
-     <strong>{time_str}</strong> · {day_str} · {flag_str}
-    &nbsp;&nbsp;|&nbsp;&nbsp; Temporal features auto-filled from system clock
+    ⏱️ <strong>{time_str}</strong> · {day_str} · {flag_str}
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    Temporal and weather features auto-filled
 </div>
 """, unsafe_allow_html=True)
 
-
 # ---- Main layout ----
 col_input, col_result = st.columns([1, 1], gap="large")
-
 
 # ============================================================
 # LEFT COLUMN — Incident Input
 # ============================================================
 with col_input:
-    st.markdown("###  Incident Details")
+    st.markdown("### 📋 Incident Details")
     st.markdown("*Enter details from the caller report*")
 
-    # ---- Group 1: Location ----
-    st.markdown("** Location**")
+    # ---- Location ----
+    st.markdown("**📍 Location**")
     nairobi_area = st.selectbox(
         "Area of Accident",
         options=[
@@ -175,9 +167,8 @@ with col_input:
 
     st.markdown("---")
 
-
-    # ---- Group 2: Crash Dynamics ----
-    st.markdown("** Crash Dynamics**")
+    # ---- Crash Dynamics ----
+    st.markdown("**💥 Crash Dynamics**")
 
     col_a, col_b = st.columns(2)
     with col_a:
@@ -218,9 +209,7 @@ with col_input:
 
     st.markdown("---")
 
-
-
-    # ---- Group 3: Pedestrian ----
+    # ---- Pedestrian ----
     st.markdown("**🚶 Pedestrian Involvement**")
     pedestrian_involved = st.radio(
         "Is a pedestrian involved?",
@@ -234,21 +223,18 @@ with col_input:
 
     # ---- Classify button ----
     classify_clicked = st.button(
-        " CLASSIFY SEVERITY",
+        "🔍 CLASSIFY SEVERITY",
         use_container_width=True,
         type="primary"
     )
-
-
 
 # ============================================================
 # RIGHT COLUMN — Result
 # ============================================================
 with col_result:
-    st.markdown("### Classification Result")
+    st.markdown("### 📊 Classification Result")
 
     if classify_clicked:
-        # ---- Run prediction ----
         addis_area = get_addis_area(nairobi_area)
         hospitals  = get_hospitals(nairobi_area)
 
@@ -261,8 +247,8 @@ with col_result:
             pedestrian_involved = pedestrian_bool
         )
 
-        severity   = result['severity']
-        confidence = result['confidence']
+        severity     = result['severity']
+        confidence   = result['confidence']
         risk_factors = result['risk_factors']
 
         # ---- Severity display ----
@@ -292,8 +278,8 @@ with col_result:
 </div>
 """, unsafe_allow_html=True)
 
-        # ---- Key risk factors (toggleable) ----
-        with st.expander(" Key Risk Factors (click to expand)"):
+        # ---- Key risk factors ----
+        with st.expander("⚠️ Key Risk Factors (click to expand)"):
             for factor in risk_factors:
                 st.markdown(f"• {factor}")
             st.caption(
@@ -307,15 +293,13 @@ with col_result:
             'Area'      : nairobi_area,
             'Severity'  : severity,
             'Confidence': f"{confidence}%",
-            'Action'    : 'ALS' if severity == 'HIGH'
-                          else 'Standard'
+            'Action'    : 'ALS' if severity == 'HIGH' else 'Standard'
         })
-        # Keep only last 5
         st.session_state.history = st.session_state.history[:5]
 
     else:
         st.info(
-            " Fill in the incident details and click "
+            "👈 Fill in the incident details and click "
             "**CLASSIFY SEVERITY** to get a result."
         )
 
@@ -323,7 +307,7 @@ with col_result:
 # RECENT CLASSIFICATIONS
 # ============================================================
 st.markdown("---")
-st.markdown("### Recent Classifications (Current Session)")
+st.markdown("### 🕐 Recent Classifications (Current Session)")
 
 if st.session_state.history:
     history_df = pd.DataFrame(st.session_state.history)

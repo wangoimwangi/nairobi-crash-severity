@@ -8,8 +8,7 @@ venv/
 # Data and Models (We don't push large binaries to Git)
 data/raw/*
 data/processed/*
-models/*.pkl
-models/*.joblib
+
 
 # OS
 .DS_Store
