@@ -104,7 +104,7 @@ if 'history' not in st.session_state:
 st.markdown("""
 <div class="main-header">
     <h1>🚨 Accident Severity Classification System</h1>
-    <p>Emergency Dispatch Decision Support — Nairobi County</p>
+    <p>Emergency Dispatch Decision Support - Nairobi County</p>
 </div>
 """, unsafe_allow_html=True)
 
