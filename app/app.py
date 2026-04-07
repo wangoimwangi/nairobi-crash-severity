@@ -24,6 +24,7 @@ st.markdown("""
 <style>
     .main-header {
         background-color: #1a1a2e;
+        text-align: center;
         padding: 1rem 1.5rem;
         border-radius: 8px;
         margin-bottom: 1.5rem;
@@ -313,7 +314,7 @@ with col_result:
         # ---- Hospital lookup ----
         st.markdown(f"""
 <div class="hospital-box">
-    <strong>🏥 Nearest Trauma Centers — {nairobi_area}</strong><br>
+    <strong>🏥 Alert Nearest Trauma Center - {nairobi_area}</strong><br>
     Primary &nbsp;: {hospitals['primary']}<br>
     Secondary : {hospitals['secondary']}
 </div>
