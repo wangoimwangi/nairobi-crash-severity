@@ -8,7 +8,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from predictor import predict, get_temporal_features, get_weather_conditions
+from predictor import predict, get_temporal_features, get_weather
 from hospitals import get_addis_area, get_hospitals
 
 # ---- Page configuration ----
@@ -109,11 +109,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---- Auto-filled info bar ----
-temporal      = get_temporal_features()
-current_weather = get_weather_conditions()
-now           = datetime.now()
-time_str      = now.strftime("%H:%M")
-day_str       = now.strftime("%A, %d %B %Y")
+temporal = get_temporal_features()
+now      = datetime.now()
+time_str = now.strftime("%H:%M")
+day_str  = now.strftime("%A, %d %B %Y")
+
+current_weather = get_weather()
+weather_emoji = {
+    'Raining'    : '🌧️ Raining',
+    'Cloudy'     : '☁️ Cloudy',
+    'Fog or mist': '🌫️ Foggy',
+    'Normal'     : '☀️ Clear'
+}.get(current_weather, '☀️ Clear')
 
 auto_flags = []
 if temporal['Is_night']:
@@ -123,21 +130,12 @@ if temporal['Is_rush_hour']:
 if temporal['Is_weekend']:
     auto_flags.append("📅 Weekend")
 
-weather_emoji = {
-    'Raining'    : '🌧️ Raining',
-    'Cloudy'     : '☁️ Cloudy',
-    'Fog or mist': '🌫️ Foggy',
-    'Normal'     : '☀️ Clear'
-}.get(current_weather, '☀️ Clear')
-
-auto_flags.append(weather_emoji)
-flag_str = " · ".join(auto_flags)
+flag_str = " · ".join(auto_flags) if auto_flags else "Normal conditions"
 
 st.markdown(f"""
 <div class="auto-info">
-    ⏱️ <strong>{time_str}</strong> · {day_str} · {flag_str}
-    &nbsp;&nbsp;|&nbsp;&nbsp;
-    Temporal and weather features auto-filled
+    ⏱️ <strong>{time_str}</strong> · {day_str} · {flag_str} · {weather_emoji}
+    &nbsp;&nbsp;|&nbsp;&nbsp; Temporal and weather features auto-filled
 </div>
 """, unsafe_allow_html=True)
 
@@ -151,7 +149,7 @@ with col_input:
     st.markdown("### 📋 Incident Details")
     st.markdown("*Enter details from the caller report*")
 
-    # ---- Location ----
+    # ---- Group 1: Location ----
     st.markdown("**📍 Location**")
     nairobi_area = st.selectbox(
         "Area of Accident",
@@ -167,7 +165,7 @@ with col_input:
 
     st.markdown("---")
 
-    # ---- Crash Dynamics ----
+    # ---- Group 2: Crash Dynamics ----
     st.markdown("**💥 Crash Dynamics**")
 
     col_a, col_b = st.columns(2)
@@ -207,9 +205,25 @@ with col_input:
             help="Injured or deceased persons"
         )
 
+    # ---- Cause of accident ----
+    cause_of_accident = st.selectbox(
+        "Cause of Accident",
+        options=[
+            "Unknown",
+            "Overspeeding",
+            "Overtaking",
+            "Changing lanes unsafely",
+            "Did not yield to pedestrian",
+            "Drunk/Impaired driving",
+            "Mechanical failure",
+            "Other"
+        ],
+        help="Primary cause — select Unknown if caller cannot confirm"
+    )
+
     st.markdown("---")
 
-    # ---- Pedestrian ----
+    # ---- Group 3: Pedestrian ----
     st.markdown("**🚶 Pedestrian Involvement**")
     pedestrian_involved = st.radio(
         "Is a pedestrian involved?",
@@ -244,12 +258,14 @@ with col_result:
             collision_type      = collision_type,
             num_vehicles        = int(num_vehicles),
             num_casualties      = int(num_casualties),
-            pedestrian_involved = pedestrian_bool
+            pedestrian_involved = pedestrian_bool,
+            cause_of_accident   = cause_of_accident
         )
 
         severity     = result['severity']
         confidence   = result['confidence']
         risk_factors = result['risk_factors']
+        weather_used = result['weather']
 
         # ---- Severity display ----
         if severity == 'HIGH':
@@ -278,13 +294,14 @@ with col_result:
 </div>
 """, unsafe_allow_html=True)
 
-        # ---- Key risk factors ----
+        # ---- Key risk factors (toggleable) ----
         with st.expander("⚠️ Key Risk Factors (click to expand)"):
             for factor in risk_factors:
                 st.markdown(f"• {factor}")
             st.caption(
+                f"Weather at classification: {weather_used} · "
                 "Based on collision type, vehicle mass, "
-                "casualties and temporal context"
+                "cause, casualties and temporal context"
             )
 
         # ---- Add to session history ----
@@ -293,6 +310,7 @@ with col_result:
             'Area'      : nairobi_area,
             'Severity'  : severity,
             'Confidence': f"{confidence}%",
+            'Weather'   : weather_used,
             'Action'    : 'ALS' if severity == 'HIGH' else 'Standard'
         })
         st.session_state.history = st.session_state.history[:5]
