@@ -126,9 +126,9 @@ auto_flags = []
 if temporal['Is_night']:
     auto_flags.append("🌙 Night time")
 if temporal['Is_rush_hour']:
-    auto_flags.append("🚗 Rush hour")
+    auto_flags.append(" Rush hour")
 if temporal['Is_weekend']:
-    auto_flags.append("📅 Weekend")
+    auto_flags.append(" Weekend")
 
 flag_str = " · ".join(auto_flags) if auto_flags else "Normal conditions"
 
@@ -146,11 +146,11 @@ col_input, col_result = st.columns([1, 1], gap="large")
 # LEFT COLUMN — Incident Input
 # ============================================================
 with col_input:
-    st.markdown("### 📋 Incident Details")
+    st.markdown("###  Incident Details")
     st.markdown("*Enter details from the caller report*")
 
     # ---- Group 1: Location ----
-    st.markdown("**📍 Location**")
+    st.markdown("**Location**")
     nairobi_area = st.selectbox(
         "Area of Accident",
         options=[
@@ -166,7 +166,7 @@ with col_input:
     st.markdown("---")
 
     # ---- Group 2: Crash Dynamics ----
-    st.markdown("**💥 Crash Dynamics**")
+    st.markdown("**Crash Dynamics**")
 
     col_a, col_b = st.columns(2)
     with col_a:
@@ -237,7 +237,7 @@ with col_input:
 
     # ---- Classify button ----
     classify_clicked = st.button(
-        "🔍 CLASSIFY SEVERITY",
+        "CLASSIFY SEVERITY",
         use_container_width=True,
         type="primary"
     )
@@ -246,7 +246,7 @@ with col_input:
 # RIGHT COLUMN — Result
 # ============================================================
 with col_result:
-    st.markdown("### 📊 Classification Result")
+    st.markdown("###Classification Result")
 
     if classify_clicked:
         addis_area = get_addis_area(nairobi_area)
@@ -272,7 +272,8 @@ with col_result:
             st.markdown(f"""
 <div class="result-high">
     <p class="severity-text-high">🔴 HIGH SEVERITY</p>
-    <p class="action-text">⚡ Dispatch ALS Immediately</p>
+    <p class="action-text"> ⚡Dispatch Advanced Life Support (ALS) Immediately </p>
+    <p class="action-text" style="font-size:0.85rem;"> Paramedics + Trauma Team Required </p>
     <p class="confidence-text">Confidence: {confidence}%</p>
 </div>
 """, unsafe_allow_html=True)
@@ -280,7 +281,8 @@ with col_result:
             st.markdown(f"""
 <div class="result-low">
     <p class="severity-text-low">🟢 LOW SEVERITY</p>
-    <p class="action-text">🚔 Standard Police Response</p>
+    <p class="action-text"> 🚑Dispatch Basic Life Support (BLS) </p>
+    <p class="action-text" style="font-size:0.85rem;"> Standard Ambulance Response </p>
     <p class="confidence-text">Confidence: {confidence}%</p>
 </div>
 """, unsafe_allow_html=True)
@@ -311,13 +313,13 @@ with col_result:
             'Severity'  : severity,
             'Confidence': f"{confidence}%",
             'Weather'   : weather_used,
-            'Action'    : 'ALS' if severity == 'HIGH' else 'Standard'
+            'Action'    : 'ALS' if severity == 'HIGH' else 'BLS'
         })
         st.session_state.history = st.session_state.history[:5]
 
     else:
         st.info(
-            "👈 Fill in the incident details and click "
+            " Fill in the incident details and click "
             "**CLASSIFY SEVERITY** to get a result."
         )
 
@@ -325,7 +327,7 @@ with col_result:
 # RECENT CLASSIFICATIONS
 # ============================================================
 st.markdown("---")
-st.markdown("### 🕐 Recent Classifications (Current Session)")
+st.markdown("###  Recent Classifications (Current Session)")
 
 if st.session_state.history:
     history_df = pd.DataFrame(st.session_state.history)
