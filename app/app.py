@@ -9,6 +9,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from predictor import predict, get_temporal_features, get_weather
+# Warm up model cache on app start
+import predictor
 from hospitals import get_addis_area, get_hospitals
 
 # ---- Page configuration ----
