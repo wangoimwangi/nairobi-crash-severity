@@ -126,9 +126,9 @@ auto_flags = []
 if temporal['Is_night']:
     auto_flags.append("🌙 Night time")
 if temporal['Is_rush_hour']:
-    auto_flags.append(" Rush hour")
+    auto_flags.append("Rush hour")
 if temporal['Is_weekend']:
-    auto_flags.append(" Weekend")
+    auto_flags.append("Weekend")
 
 flag_str = " · ".join(auto_flags) if auto_flags else "Normal conditions"
 
@@ -146,7 +146,7 @@ col_input, col_result = st.columns([1, 1], gap="large")
 # LEFT COLUMN — Incident Input
 # ============================================================
 with col_input:
-    st.markdown("###  Incident Details")
+    st.subheader("Incident Details")
     st.markdown("*Enter details from the caller report*")
 
     # ---- Group 1: Location ----
@@ -154,14 +154,38 @@ with col_input:
     nairobi_area = st.selectbox(
         "Area of Accident",
         options=[
-            "CBD", "Westlands", "Upper Hill",
-            "Industrial Area", "Langata/Ngong Road",
-            "Kasarani/Thika Road", "Eastleigh", "Karen",
-            "Embakasi/JKIA", "Mombasa Road",
-            "Parklands", "South B/C"
+            # Central
+            "CBD",
+            "Upper Hill",
+            "Westlands",
+            "Parklands",
+            # Major Corridors
+            "Mombasa Road",
+            "Langata/Ngong Road/Southern Bypass",
+            "Thika Road/Kasarani",
+            "Waiyaki Way",
+            "Limuru Road",
+            "Outer Ring Road",
+            "Jogoo Road",
+            # Residential/Commercial
+            "Eastleigh/Jogoo Road",
+            "Karen",
+            "Kilimani",
+            "Lavington",
+            "South B/C",
+            "Gigiri/Runda",
+            # Industrial/Outer
+            "Industrial Area",
+            "Embakasi/JKIA",
+            "Ruiru/Juja",
+            "Dagoretti",
+            "Kibera/Kawangware",
+            # Fallback
+            "Other/Unknown"
         ],
-        help="Select the area where the accident occurred"
+        help="Select the nearest area. Choose Other/Unknown if exact location is not listed."
     )
+    st.caption("Select the nearest area if exact location is not listed")
 
     st.markdown("---")
 
@@ -205,7 +229,6 @@ with col_input:
             help="Injured or deceased persons"
         )
 
-    # ---- Cause of accident ----
     cause_of_accident = st.selectbox(
         "Cause of Accident",
         options=[
@@ -246,7 +269,7 @@ with col_input:
 # RIGHT COLUMN — Result
 # ============================================================
 with col_result:
-    st.markdown("###Classification Result")
+    st.subheader("Classification Result")
 
     if classify_clicked:
         addis_area = get_addis_area(nairobi_area)
@@ -272,8 +295,8 @@ with col_result:
             st.markdown(f"""
 <div class="result-high">
     <p class="severity-text-high">🔴 HIGH SEVERITY</p>
-    <p class="action-text"> ⚡Dispatch Advanced Life Support (ALS) Immediately </p>
-    <p class="action-text" style="font-size:0.85rem;"> Paramedics + Trauma Team Required </p>
+    <p class="action-text">⚡ Dispatch Advanced Life Support (ALS) Immediately</p>
+    <p class="action-text" style="font-size:0.85rem;">Paramedics + Trauma Team Required</p>
     <p class="confidence-text">Confidence: {confidence}%</p>
 </div>
 """, unsafe_allow_html=True)
@@ -281,8 +304,8 @@ with col_result:
             st.markdown(f"""
 <div class="result-low">
     <p class="severity-text-low">🟢 LOW SEVERITY</p>
-    <p class="action-text"> 🚑Dispatch Basic Life Support (BLS) </p>
-    <p class="action-text" style="font-size:0.85rem;"> Standard Ambulance Response </p>
+    <p class="action-text">🚑 Dispatch Basic Life Support (BLS)</p>
+    <p class="action-text" style="font-size:0.85rem;">Standard Ambulance Response</p>
     <p class="confidence-text">Confidence: {confidence}%</p>
 </div>
 """, unsafe_allow_html=True)
@@ -319,7 +342,7 @@ with col_result:
 
     else:
         st.info(
-            " Fill in the incident details and click "
+            "Fill in the incident details and click "
             "**CLASSIFY SEVERITY** to get a result."
         )
 
@@ -327,7 +350,7 @@ with col_result:
 # RECENT CLASSIFICATIONS
 # ============================================================
 st.markdown("---")
-st.markdown("###  Recent Classifications (Current Session)")
+st.subheader("Recent Classifications (Current Session)")
 
 if st.session_state.history:
     history_df = pd.DataFrame(st.session_state.history)
