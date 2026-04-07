@@ -24,7 +24,6 @@ st.markdown("""
 <style>
     .main-header {
         background-color: #1a1a2e;
-        text-align: center;
         padding: 1rem 1.5rem;
         border-radius: 8px;
         margin-bottom: 1.5rem;
@@ -34,11 +33,13 @@ st.markdown("""
         color: #ffffff;
         font-size: 1.6rem;
         margin: 0;
+        text-align: left !important;
     }
     .main-header p {
         color: #a0aec0;
         margin: 0.2rem 0 0 0;
         font-size: 0.9rem;
+        text-align: left !important;
     }
     .auto-info {
         background-color: #1a202c;
