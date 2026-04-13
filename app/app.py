@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 from datetime import datetime
 from predictor import predict, get_temporal_features, get_weather
 from hospitals import get_addis_area, get_hospitals
@@ -18,7 +19,7 @@ def load_css(path):
     with open(path, encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-load_css("style.css")
+load_css(os.path.join(os.path.dirname(__file__), "style.css"))
 
 # 3. Session State for History
 if 'history' not in st.session_state:
