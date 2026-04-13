@@ -1,0 +1,191 @@
+@import url('https://googleapis.com');
+
+/* --- 1. Global Reset & Layout --- */
+html, body, [class*="css"], .stApp {
+    font-family: 'Inter', sans-serif !important;
+    background-color: #0B0F1A !important; 
+}
+
+.block-container {
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+}
+
+#MainMenu, footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] {
+    display: none !important;
+}
+
+/* --- 2. High-Visibility Headings --- */
+h1, h2, h3, .stSubheader, [data-testid="stHeader"], .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+    color: #FFFFFF !important; 
+    font-weight: 700 !important;
+    margin-bottom: 1.2rem !important;
+}
+
+/* --- 3. Body Text & Input Labels --- */
+label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
+    color: #E2E8F0 !important; 
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+}
+
+/* --- 4. Seamless Stacked Header (No-Box Style) --- */
+.main-header {
+    background-color: transparent !important;
+    border: none !important;
+    border-left: 6px solid #06B6D4 !important;
+    padding: 0.5rem 0 0.5rem 1.5rem !important;
+    margin-bottom: 0.5rem;
+    display: flex;
+    flex-direction: column; /* Vertically stacks the title and tag */
+    gap: 4px;
+}
+
+.agency-tag {
+    color: #06B6D4 !important;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+
+.main-header h1 { 
+    color: #FFFFFF !important; 
+    font-size: 1.8rem !important; 
+    font-weight: 800 !important; 
+    margin: 0 !important;
+    letter-spacing: -0.02em;
+}
+
+.header-subtitle { 
+    color: #94A3B8 !important; 
+    font-size: 0.88rem !important;
+    margin: 0 !important;
+    opacity: 0.8;
+}
+
+/* --- 5. Auto-info Bar & Cyan Pulse --- */
+.auto-info {
+    background: transparent !important; 
+    border: none !important;
+    padding: 0 !important;
+    color: #F8FAFC !important;
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: flex-start; 
+    gap: 10px; 
+}
+
+.auto-info strong::before {
+    content: "●";
+    color: #06B6D4; 
+    margin-right: 8px;
+    animation: pulse-cyan 2s infinite;
+}
+
+@keyframes pulse-cyan {
+    0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; }
+}
+
+/* --- 6. Input Fields & Dropdown Visibility --- */
+div[data-testid="stSelectbox"] > div > div, 
+div[data-testid="stNumberInput"] input {
+    background-color: #1E293B !important;
+    border: 1px solid #334155 !important;
+    color: #FFFFFF !important;
+    border-radius: 8px !important;
+}
+
+[data-testid="stSelectbox"] svg, 
+[data-testid="stNumberInput"] svg {
+    fill: #06B6D4 !important; 
+    opacity: 1 !important;
+}
+
+/* --- 7. Severity Result Panels --- */
+.result-high {
+    background: linear-gradient(145deg, #2D0A0A 0%, #160505 100%);
+    border: 2px solid #EF4444;
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+}
+.result-low {
+    background: linear-gradient(145deg, #062016 0%, #02110B 100%);
+    border: 2px solid #10B981;
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+}
+.severity-text-high { color: #EF4444 !important; font-size: 2.2rem; font-weight: 800; }
+.severity-text-low { color: #10B981 !important; font-size: 2.2rem; font-weight: 800; }
+.action-text { color: #FFFFFF !important; font-weight: 600; font-size: 1.1rem; }
+
+/* --- 8. Restored Awaiting Box (Dotted/Dashed style) --- */
+.awaiting-box {
+    background-color: #161E2E;
+    border: 2px dashed #334155 !important; /* Forces the dashed border back */
+    border-radius: 16px;
+    padding: 5rem 2rem;
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.awaiting-box h3 { 
+    color: #FFFFFF !important; 
+    font-size: 1.4rem !important; 
+    font-weight: 700 !important;
+}
+
+.awaiting-box p { 
+    color: #E2E8F0 !important; 
+    font-size: 1rem !important; 
+    opacity: 0.9 !important;
+}
+
+/* --- 9. Hospital & Risk Factor Visibility Fix --- */
+.hospital-box {
+    background: #161E2E;
+    border: 1px solid #1E293B;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+}
+.hospital-box strong { color: #06B6D4 !important; display: block; margin-bottom: 8px; }
+.hospital-box b { color: #F8FAFC !important; font-weight: 700; }
+.hospital-box span { color: #94A3B8 !important; font-size: 0.85rem; }
+
+.stExpander, [data-testid="stExpander"] {
+    background-color: transparent !important;
+    border: 1px solid #1E293B !important;
+}
+.stExpander p, .stExpander li { color: #F8FAFC !important; font-weight: 500 !important; }
+
+/* --- 10. Primary Button (Cyan Identity) --- */
+button[kind="primary"] {
+    background: linear-gradient(90deg, #06B6D4, #0891B2) !important;
+    color: white !important;
+    height: 3.5rem !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    border: none !important;
+    box-shadow: 0 4px 14px 0 rgba(6, 182, 212, 0.3) !important;
+}
+
+/* --- 11. History Table --- */
+[data-testid="stTable"] { background-color: #161E2E !important; border-radius: 12px; }
+[data-testid="stTable"] thead tr th { color: #FFFFFF !important; background-color: #1E293B !important; }
+[data-testid="stTable"] tbody tr td { color: #F8FAFC !important; }
+.no-history-text { color: #F1F5F9 !important; padding: 40px; background: #161E2E; border: 1px dashed #334155; border-radius: 12px; text-align: center; }
+
+/* --- 12. Cleanup --- */
+hr { display: none !important; }
+[data-testid="column"] { padding-top: 0.5rem !important; }
+
+
+[data-testid="stExpander"] [data-testid="stTable"] td, 
+[data-testid="stExpander"] [data-testid="stTable"] th {
+    font-size: 0.8rem !important; /* Smaller text for side-column log */
+    padding: 8px !important;
+}
