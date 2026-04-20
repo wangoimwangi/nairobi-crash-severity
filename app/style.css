@@ -1,35 +1,61 @@
+/* ============================================================
+   style.css
+   Accident Severity Classification System (ASCS)
+   ============================================================
+
+   DESIGN:
+   Dark operational theme (#0B0F1A) chosen to match real-world emergency dispatch console aesthetics. 
+   Cyan (#06B6D4) is the primary accent - used for active elements, borders, and interactive indicators. 
+   Red (#EF4444) and Green (#10B981) are reserved exclusively for HIGH and LOW severity results to ensure instant visual recognition by dispatchers.
+   ============================================================ */
+
+
+/* Inter font loaded via Google Fonts for clean, readable UI */
 @import url('https://googleapis.com');
 
-/* --- 1. Global Reset & Layout --- */
+
+/* --- 1. Global Reset & Layout ---
+Sets the base dark background and font across all Streamlit elements. !important overrides Streamlit's default styles. */
 html, body, [class*="css"], .stApp {
     font-family: 'Inter', sans-serif !important;
     background-color: #0B0F1A !important; 
 }
 
+
+/* Removes excessive default padding from Streamlit's main content block so the layout fills the screen properly */
 .block-container {
     padding-top: 2rem !important;
     padding-bottom: 2rem !important;
 }
 
+/* Removes Streamlit's default chrome elements (menu, footer, toolbar) */
 #MainMenu, footer, header, [data-testid="stToolbar"], [data-testid="stDecoration"] {
     display: none !important;
 }
 
-/* --- 2. High-Visibility Headings --- */
+
+/* --- 2. High-Visibility Headings ---
+Ensures all headings render in white against the dark background. */
+
 h1, h2, h3, .stSubheader, [data-testid="stHeader"], .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
     color: #FFFFFF !important; 
     font-weight: 700 !important;
     margin-bottom: 1.2rem !important;
 }
 
-/* --- 3. Body Text & Input Labels --- */
+
+/* --- 3. Body Text & Input Labels ---
+Input field labels and markdown body text using #E2E8F0 (light slate) for readability without full white contrast. Font weight 600 ensures labels are clearly legible. */
+
 label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
     color: #E2E8F0 !important; 
     font-weight: 600 !important;
     font-size: 0.95rem !important;
 }
 
-/* --- 4. Seamless Stacked Header (No-Box Style) --- */
+
+/* --- 4. Seamless Stacked Header ---
+The header uses a transparent background with a cyan left border - The flex column stacks the  agency tag above the title. */
 .main-header {
     background-color: transparent !important;
     border: none !important;
@@ -41,6 +67,7 @@ label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
     gap: 4px;
 }
 
+/* Small uppercase label above the main title - identifies the operational unit context for the dispatcher */
 .agency-tag {
     color: #06B6D4 !important;
     font-size: 0.75rem;
@@ -49,6 +76,7 @@ label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
     text-transform: uppercase;
 }
 
+/* Main system title - large, bold, tight letter spacing */
 .main-header h1 { 
     color: #FFFFFF !important; 
     font-size: 1.8rem !important; 
@@ -57,6 +85,7 @@ label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
     letter-spacing: -0.02em;
 }
 
+/* Subtitle line below the title - muted colour to create visual hierarchy without competing with the title */
 .header-subtitle { 
     color: #94A3B8 !important; 
     font-size: 0.88rem !important;
@@ -64,7 +93,9 @@ label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
     opacity: 0.8;
 }
 
-/* --- 5. Auto-info Bar & Cyan Pulse --- */
+
+/* --- 5. Auto-info Bar & Cyan Pulse ---
+Transparent bar below the header showing live time, date, weather and operational conditions. The pulsing cyan dot before the time signals the system is actively running. */
 .auto-info {
     background: transparent !important; 
     border: none !important;
@@ -77,6 +108,7 @@ label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
     gap: 10px; 
 }
 
+/* Inserts the pulsing dot before the time value */
 .auto-info strong::before {
     content: "●";
     color: #06B6D4; 
@@ -84,11 +116,16 @@ label p, .stMarkdown p, [data-testid="stWidgetLabel"] p {
     animation: pulse-cyan 2s infinite;
 }
 
+/* Keyframe animation for the active status indicator dot */
 @keyframes pulse-cyan {
     0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; }
 }
 
-/* --- 6. Input Fields & Dropdown Visibility --- */
+
+/* --- 6. Input Fields & Dropdown Visibility ---
+Input fields use a dark slate background (#1E293B) with a subtle border to distinguish them from the page background.
+White text ensures entered values are clearly readable. Cyan arrow icons on dropdowns reinforce the accent colour. */
+
 div[data-testid="stSelectbox"] > div > div, 
 div[data-testid="stNumberInput"] input {
     background-color: #1E293B !important;
@@ -97,13 +134,20 @@ div[data-testid="stNumberInput"] input {
     border-radius: 8px !important;
 }
 
+/* Cyan dropdown and stepper arrows for visual consistency */
 [data-testid="stSelectbox"] svg, 
 [data-testid="stNumberInput"] svg {
     fill: #06B6D4 !important; 
     opacity: 1 !important;
 }
 
-/* --- 7. Severity Result Panels --- */
+
+/* --- 7. Severity Result Panels ---
+Two distinct panels for HIGH and LOW severity outcomes. Colour coding is critical for dispatcher recognition speed:
+   RED (#EF4444) = HIGH = ALS dispatch required immediately
+   GREEN (#10B981) = LOW = BLS standard response sufficient
+ */
+
 .result-high {
     background: linear-gradient(145deg, #2D0A0A 0%, #160505 100%);
     border: 2px solid #EF4444;
@@ -118,14 +162,45 @@ div[data-testid="stNumberInput"] input {
     padding: 2rem;
     text-align: center;
 }
+
+/* Large bold severity label - first thing the dispatcher sees */
 .severity-text-high { color: #EF4444 !important; font-size: 2.2rem; font-weight: 800; }
 .severity-text-low { color: #10B981 !important; font-size: 2.2rem; font-weight: 800; }
+
+/* Action instruction text - ALS or BLS dispatch recommendation */
 .action-text { color: #FFFFFF !important; font-weight: 600; font-size: 1.1rem; }
 
-/* --- 8. Restored Awaiting Box (Dotted/Dashed style) --- */
+/* Confidence score display below the action text */
+.confidence-text { color: #94A3B8 !important; font-size: 0.9rem; margin-top: 0.5rem; }
+
+/* Confidence bar track - dark background for contrast */
+.conf-track {
+    background: #0a0f1e;
+    border-radius: 4px;
+    height: 5px;
+    overflow: hidden;
+    margin: 0.8rem auto 0;
+    max-width: 80%;
+}
+
+/* Fill bar - colour matches severity (red or green) */
+.conf-fill-high {
+    height: 100%;
+    background: linear-gradient(90deg, #7f1d1d, #ef4444);
+    border-radius: 4px;
+}
+.conf-fill-low {
+    height: 100%;
+    background: linear-gradient(90deg, #064e3b, #10b981);
+    border-radius: 4px;
+}
+
+
+/* --- 8. Awaiting Box ---
+Shown in the result column before any classification is run. Dashed border signals an empty/inactive state. */
 .awaiting-box {
     background-color: #161E2E;
-    border: 2px dashed #334155 !important; /* Forces the dashed border back */
+    border: 2px dashed #334155 !important;
     border-radius: 16px;
     padding: 5rem 2rem;
     text-align: center;
@@ -144,25 +219,75 @@ div[data-testid="stNumberInput"] input {
     opacity: 0.9 !important;
 }
 
-/* --- 9. Hospital & Risk Factor Visibility Fix --- */
+/* --- 9. Hospital Box ---
+Displays nearest trauma centres after classification. */
+
 .hospital-box {
     background: #161E2E;
     border: 1px solid #1E293B;
     border-radius: 12px;
     padding: 1.5rem;
-    margin-top: 1rem;
+    margin-top: 1.5rem;
 }
+
+/* Hospital section title in cyan */
 .hospital-box strong { color: #06B6D4 !important; display: block; margin-bottom: 8px; }
+
+/* Hospital names in white for readability */
 .hospital-box b { color: #F8FAFC !important; font-weight: 700; }
+
+/* Primary/Secondary labels in muted colour for hierarchy */
 .hospital-box span { color: #94A3B8 !important; font-size: 0.85rem; }
 
-.stExpander, [data-testid="stExpander"] {
-    background-color: transparent !important;
-    border: 1px solid #1E293B !important;
-}
-.stExpander p, .stExpander li { color: #F8FAFC !important; font-weight: 500 !important; }
 
-/* --- 10. Primary Button (Cyan Identity) --- */
+/* --- 10. Expander (Risk Factors & Session Log) ---
+Transparent background keeps expanders from creating visual noise. 
+The additional selectors force the dark background and white text inside the expanded content area  */
+.stExpander, [data-testid="stExpander"] {
+    background-color: #161E2E !important;
+    border: 1px solid #1E293B !important;
+    border-radius: 8px !important;
+    margin-top: 1.5rem !important;
+}
+
+/* Expander header row — this is the white bar */
+.stExpander summary,
+[data-testid="stExpander"] summary {
+    background-color: #161E2E !important;
+    color: #F8FAFC !important;
+}
+
+/* Expander content area */
+.stExpander > details,
+[data-testid="stExpander"] > details {
+    background-color: #161E2E !important;
+}
+
+.stExpander > details > div,
+[data-testid="stExpander"] > details > div {
+    background-color: #161E2E !important;
+}
+
+/* All text inside expanders */
+.stExpander p, .stExpander li,
+.stExpander span, .stExpander div,
+[data-testid="stExpander"] p,
+[data-testid="stExpander"] li,
+[data-testid="stExpander"] span {
+    color: #F8FAFC !important;
+    font-weight: 500 !important;
+}
+
+/* Expander arrow/chevron icon */
+.stExpander summary svg,
+[data-testid="stExpander"] summary svg {
+    fill: #06B6D4 !important;
+}
+
+/* --- 11. Primary Button ---
+Cyan gradient button is deliberately distinct from the red severity result - prevents visual confusion between theclassify action and a HIGH severity alert. 
+The glow shadow dds depth and draws attention to the primary action. */
+
 button[kind="primary"] {
     background: linear-gradient(90deg, #06B6D4, #0891B2) !important;
     color: white !important;
@@ -173,19 +298,32 @@ button[kind="primary"] {
     box-shadow: 0 4px 14px 0 rgba(6, 182, 212, 0.3) !important;
 }
 
-/* --- 11. History Table --- */
+
+/* --- 12. Session History Table ---
+Dark card background for the classification log table. White headers on dark header row for clear column labels. Near-white cell text for readable history entries. */
 [data-testid="stTable"] { background-color: #161E2E !important; border-radius: 12px; }
 [data-testid="stTable"] thead tr th { color: #FFFFFF !important; background-color: #1E293B !important; }
 [data-testid="stTable"] tbody tr td { color: #F8FAFC !important; }
-.no-history-text { color: #F1F5F9 !important; padding: 40px; background: #161E2E; border: 1px dashed #334155; border-radius: 12px; text-align: center; }
 
-/* --- 12. Cleanup --- */
+/* Empty state message when no classifications recorded yet */
+.no-history-text { 
+    color: #F1F5F9 !important; 
+    padding: 40px; 
+    background: #161E2E; 
+    border: 1px dashed #334155; 
+    border-radius: 12px; 
+    text-align: center; 
+}
+
+
+/* --- 13. Cleanup ---
+Removes the horizontal rules which create visual clutter. Removes excess top padding from columns. */
 hr { display: none !important; }
 [data-testid="column"] { padding-top: 0.5rem !important; }
 
-
+/* Smaller font size for history table inside the expander - prevents the log from overwhelming the result panel */
 [data-testid="stExpander"] [data-testid="stTable"] td, 
 [data-testid="stExpander"] [data-testid="stTable"] th {
-    font-size: 0.8rem !important; /* Smaller text for side-column log */
+    font-size: 0.8rem !important;
     padding: 8px !important;
 }

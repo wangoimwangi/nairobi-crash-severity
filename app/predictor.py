@@ -8,20 +8,37 @@
 import pandas as pd
 import numpy as np
 import requests
+import streamlit as st
 from datetime import datetime
 import joblib
 import json
 import os
 
-MODEL_PATH    = os.path.join(os.path.dirname(__file__), '..', 'models', 'best_rf.pkl')
-METADATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'model_metadata.json')
+# ---- Load model and metadata (cached - loads once only) ----
+MODEL_PATH    = os.path.join(os.path.dirname(__file__),
+                              '..', 'models', 'best_rf_compressed.pkl')
+METADATA_PATH = os.path.join(os.path.dirname(__file__),
+                              '..', 'models', 'model_metadata.json')
+@st.cache_resource
+def load_model():
+    import gzip
+    import pickle
+    with gzip.open(MODEL_PATH, 'rb') as f:
+        return pickle.load(f)
+    
 
-model = joblib.load(MODEL_PATH)
-with open(METADATA_PATH, 'r') as f:
-    metadata = json.load(f)
+@st.cache_resource
+def load_metadata():
+    with open(METADATA_PATH, 'r') as f:
+        return json.load(f)
+
+model    = load_model()
+metadata = load_metadata()
 
 THRESHOLD = metadata['optimal_thresholds']['Balanced Random Forest']
 
+
+# ---- Modal defaults ----
 MODAL_DEFAULTS = {
     'Age_band_of_driver'     : '18-30',
     'Sex_of_driver'          : 'Male',
@@ -42,6 +59,8 @@ MODAL_DEFAULTS = {
     'Types_of_Junction'      : 'No junction'
 }
 
+
+# ---- Vehicle type mapping ----
 VEHICLE_MAPPING = {
     'Matatu/Minibus'      : 'Public (> 45 seats)',
     'Car/Saloon'          : 'Automobile',
@@ -52,6 +71,8 @@ VEHICLE_MAPPING = {
     'Other'               : 'Other'
 }
 
+
+# ---- Collision type mapping ----
 COLLISION_MAPPING = {
     'Head-on'        : 'Collision with roadside-parked vehicles',
     'Rear-end'       : 'Rear-end',
@@ -61,6 +82,8 @@ COLLISION_MAPPING = {
     'Other'          : 'Other'
 }
 
+
+# ---- Cause of accident mapping ----
 CAUSE_MAPPING = {
     'Unknown'                    : 'No distancing',
     'Overspeeding'               : 'Overspeed',
@@ -73,7 +96,12 @@ CAUSE_MAPPING = {
 }
 
 
+@st.cache_data(ttl=600)
 def get_weather():
+    """
+Fetch current weather for Nairobi using Open-Meteo API. Cached for 10 minutes - not called on every click.
+No API key required. Falls back to Normal if API unavailable.
+    """
     url = (
         "https://api.open-meteo.com/v1/forecast"
         "?latitude=-1.2921&longitude=36.8219"
@@ -85,11 +113,12 @@ def get_weather():
         data     = response.json()
         precip   = data['current']['precipitation']
         code     = data['current']['weathercode']
-        if precip > 0 or code in [51,53,55,61,63,65,80,81,82]:
+
+        if precip > 0 or code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
             return 'Raining'
-        elif code in [71,73,75,77]:
+        elif code in [71, 73, 75, 77]:
             return 'Cloudy'
-        elif code in [45,48]:
+        elif code in [45, 48]:
             return 'Fog or mist'
         else:
             return 'Normal'
@@ -98,18 +127,21 @@ def get_weather():
 
 
 def get_temporal_features():
+    """Auto-derive temporal features from system clock."""
     now          = datetime.now()
     hour         = now.hour
     day_of_week  = now.strftime('%A')
     is_night     = 1 if (hour >= 20 or hour <= 5) else 0
     is_rush_hour = 1 if (7 <= hour <= 9 or 17 <= hour <= 19) else 0
     is_weekend   = 1 if day_of_week in ['Saturday', 'Sunday'] else 0
+
     if 6 <= hour <= 18:
         light = 'Daylight'
     elif 19 <= hour <= 20:
         light = 'Darkness - lights lit'
     else:
         light = 'Darkness - no lighting'
+
     return {
         'Day_of_week'     : day_of_week,
         'Hour_of_day'     : hour,
@@ -123,20 +155,47 @@ def get_temporal_features():
 def hydrate_features(area_addis, vehicle_type, collision_type,
                      num_vehicles, num_casualties,
                      pedestrian_involved, cause_of_accident):
+    """
+Build complete 28-feature vector from 7 dispatcher inputs.
+
+Tiered Input Architecture:
+    - 7 high-variance features from dispatcher
+    - 6 temporal features auto-derived from system clock
+    - 1 weather feature cached from Open-Meteo API (10 min TTL)
+    - 14 low-impact features filled with modal defaults
+    """
+
+    # ---- Start with modal defaults ----
     features = MODAL_DEFAULTS.copy()
+
+    # ---- Auto-retrieve weather (cached — fast) ----
     features['Weather_conditions'] = get_weather()
+
+    # ---- Auto-fill temporal features ----
     temporal = get_temporal_features()
     features.update(temporal)
+
+    # ---- Apply dispatcher inputs ----
     features['Area_accident_occured']       = area_addis
-    features['Type_of_vehicle']             = VEHICLE_MAPPING.get(vehicle_type, 'Automobile')
-    features['Type_of_collision']           = COLLISION_MAPPING.get(collision_type, 'Other')
+    features['Type_of_vehicle']             = VEHICLE_MAPPING.get(
+        vehicle_type, 'Automobile'
+    )
+    features['Type_of_collision']           = COLLISION_MAPPING.get(
+        collision_type, 'Other'
+    )
     features['Number_of_vehicles_involved'] = num_vehicles
     features['Number_of_casualties']        = num_casualties
-    features['Cause_of_accident']           = CAUSE_MAPPING.get(cause_of_accident, 'No distancing')
+    features['Cause_of_accident']           = CAUSE_MAPPING.get(
+        cause_of_accident, 'No distancing'
+    )
+
+    # ---- Pedestrian movement ----
     if pedestrian_involved:
         features['Pedestrian_movement'] = 'Crossing from driver\'s nearside'
     else:
         features['Pedestrian_movement'] = 'Not a Pedestrian'
+
+    # ---- Build dataframe in correct column order ----
     column_order = [
         'Day_of_week', 'Age_band_of_driver', 'Sex_of_driver',
         'Educational_level', 'Vehicle_driver_relation',
@@ -149,6 +208,7 @@ def hydrate_features(area_addis, vehicle_type, collision_type,
         'Vehicle_movement', 'Pedestrian_movement', 'Cause_of_accident',
         'Hour_of_day', 'Is_night', 'Is_rush_hour', 'Is_weekend'
     ]
+
     df = pd.DataFrame([features])[column_order]
     return df
 
@@ -156,42 +216,129 @@ def hydrate_features(area_addis, vehicle_type, collision_type,
 def predict(area_addis, vehicle_type, collision_type,
             num_vehicles, num_casualties,
             pedestrian_involved, cause_of_accident):
-    df         = hydrate_features(area_addis, vehicle_type, collision_type,
-                                   num_vehicles, num_casualties,
-                                   pedestrian_involved, cause_of_accident)
+    """
+Run prediction on 7 dispatcher inputs. Returns severity, confidence, and top risk factors.
+    """
+
+    # ---- Build feature vector ----
+    df = hydrate_features(
+        area_addis, vehicle_type, collision_type,
+        num_vehicles, num_casualties,
+        pedestrian_involved, cause_of_accident
+    )
+
+    # ---- Get probability from model ----
     proba      = model.predict_proba(df)[0][1]
     severity   = 'HIGH' if proba >= THRESHOLD else 'LOW'
     confidence = round(proba * 100, 1)
-    risk_factors = []
-    if pedestrian_involved:
-        risk_factors.append("Pedestrian involved — zero protection")
-    if vehicle_type == 'Lorry/Truck':
-        risk_factors.append("Heavy vehicle — high mass impact")
-    if collision_type == 'Head-on':
-        risk_factors.append("Head-on collision — maximum energy transfer")
-    if collision_type == 'Rollover':
-        risk_factors.append("Rollover — high injury risk")
-    if num_casualties >= 3:
-        risk_factors.append(f"{num_casualties} casualties — mass casualty event")
-    if num_vehicles >= 3:
-        risk_factors.append(f"{num_vehicles} vehicles — high energy crash")
-    if cause_of_accident == 'Overspeeding':
-        risk_factors.append("Overspeeding — high kinetic energy at impact")
-    if cause_of_accident == 'Drunk/Impaired driving':
-        risk_factors.append("Impaired driver — unpredictable behaviour")
-    if cause_of_accident == 'Overtaking':
-        risk_factors.append("Overtaking — high head-on collision risk")
-    temporal = get_temporal_features()
-    if temporal['Is_night']:
-        risk_factors.append("Night time — reduced visibility")
-    if temporal['Is_rush_hour']:
-        risk_factors.append("Rush hour — high traffic density")
     current_weather = get_weather()
-    if current_weather == 'Raining':
-        risk_factors.append("Raining — reduced road grip and visibility")
-    elif current_weather == 'Fog or mist':
-        risk_factors.append("Fog or mist — severely reduced visibility")
-    risk_factors = risk_factors[:3] if risk_factors else ["Standard risk profile"]
+    temporal        = get_temporal_features()
+
+# ---- Risk factors aligned with classification result ----
+# Factors are selected based on the actual severity outcome.
+# HIGH factors explain what drove the classification up. LOW factors explain why BLS is sufficient, or flag if the case is borderline and needs monitoring.
+    risk_factors = []
+
+    if severity == 'HIGH':
+        # Show factors that contributed to the HIGH classification
+        if collision_type == 'Head-on':
+            risk_factors.append(
+                "Head-on collision - maximum energy transfer"
+            )
+        if collision_type == 'Rollover':
+            risk_factors.append(
+                "Rollover - high injury and entrapment risk"
+            )
+        if pedestrian_involved:
+            risk_factors.append(
+                "Pedestrian involved - zero vehicle protection"
+            )
+        if vehicle_type == 'Lorry/Truck':
+            risk_factors.append(
+                "Heavy vehicle - high mass impact force"
+            )
+        if num_casualties >= 3:
+            risk_factors.append(
+                f"{num_casualties} casualties - mass casualty event"
+            )
+        if num_vehicles >= 3:
+            risk_factors.append(
+                f"{num_vehicles} vehicles - high energy crash"
+            )
+        if cause_of_accident == 'Overspeeding':
+            risk_factors.append(
+                "Overspeeding - high kinetic energy at impact"
+            )
+        if cause_of_accident == 'Drunk/Impaired driving':
+            risk_factors.append(
+                "Impaired driver - unpredictable behaviour"
+            )
+        if cause_of_accident == 'Overtaking':
+            risk_factors.append(
+                "Overtaking - elevated head-on collision risk"
+            )
+        if temporal['Is_night']:
+            risk_factors.append("Night time - reduced visibility")
+        if temporal['Is_rush_hour']:
+            risk_factors.append("Rush hour - high traffic density")
+        if current_weather == 'Raining':
+            risk_factors.append(
+                "Raining - reduced road grip and visibility"
+            )
+        elif current_weather == 'Fog or mist':
+            risk_factors.append(
+                "Fog or mist - severely reduced visibility"
+            )
+        # Fallback if no specific factors triggered
+        if not risk_factors:
+            risk_factors.append(
+                "Pattern match - historical data indicates HIGH severity"
+            )
+
+    else:
+# LOW classification - borderline cases (proba 30-40%) get escalation-aware notes so the dispatcher stays alert.
+# Confident LOW cases get factors explaining the result.
+        if proba >= 0.30:
+            # Borderline - close to threshold, monitor closely
+            risk_factors = [
+                "Borderline case - monitor closely for escalation",
+                "Reassess if caller reports additional casualties",
+                "Upgrade to ALS if patient condition deteriorates"
+            ]
+        else:
+            # Confident LOW - explain why BLS is appropriate
+            if collision_type in ['Rear-end', 'Side impact']:
+                risk_factors.append(
+                    f"{collision_type} - typically lower severity impact"
+                )
+            if num_casualties <= 2 and not pedestrian_involved:
+                risk_factors.append(
+                    "Low casualty count - BLS response appropriate"
+                )
+            if vehicle_type == 'Car/Saloon':
+                risk_factors.append(
+                    "Passenger vehicle - standard safety profile"
+                )
+            if temporal['Is_rush_hour']:
+                risk_factors.append(
+                    "Rush hour - ensure clear route for response unit"
+                )
+            if current_weather == 'Raining':
+                risk_factors.append(
+                    "Raining - allow extra response travel time"
+                )
+            # Fallback
+            if not risk_factors:
+                risk_factors.append(
+                    "No elevated risk factors - standard BLS protocol"
+                )
+
+# Return top 3 most relevant factors only.
+# Limiting to 3 keeps the display scannable for a dispatcher under time pressure during an emergency call.
+    risk_factors = risk_factors[:3] if risk_factors else [
+        "Standard risk profile - no elevated factors detected"
+    ]
+
     return {
         'severity'    : severity,
         'confidence'  : confidence,
