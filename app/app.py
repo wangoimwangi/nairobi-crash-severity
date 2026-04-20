@@ -123,8 +123,8 @@ with col_input:
     st.markdown("*Enter details from the caller report*")
 
     # ── LOCATION ─────────────────────────────────────────────
-    # Nairobi area is mapped to an Addis Ababa sub-city equivalent (via hospitals.py) before being passed to the model. 
-    # This is the proxy dataset mapping layer.
+# Nairobi area is mapped to the land-use category used in the RTA training dataset (via hospitals.py).
+# Categories: Office areas, Residential areas, Outside rural areas, Industrial areas. This satisfies FR iv.
 
     st.markdown("**Location**")
     nairobi_area = st.selectbox(
@@ -235,6 +235,7 @@ with col_result:
 
         result = predict(
             area_addis          = addis_area,
+            nairobi_area        = nairobi_area, 
             vehicle_type        = vehicle_type,
             collision_type      = collision_type,
             num_vehicles        = int(num_vehicles),

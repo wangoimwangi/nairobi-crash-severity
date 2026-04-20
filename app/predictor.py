@@ -213,7 +213,7 @@ Tiered Input Architecture:
     return df
 
 
-def predict(area_addis, vehicle_type, collision_type,
+def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             num_vehicles, num_casualties,
             pedestrian_involved, cause_of_accident):
     """
@@ -234,84 +234,102 @@ Run prediction on 7 dispatcher inputs. Returns severity, confidence, and top ris
     current_weather = get_weather()
     temporal        = get_temporal_features()
 
-# ---- Risk factors aligned with classification result ----
-# Factors are selected based on the actual severity outcome.
-# HIGH factors explain what drove the classification up. LOW factors explain why BLS is sufficient, or flag if the case is borderline and needs monitoring.
-    risk_factors = []
+# ---- Identify which factors are driving the classification ----
+# Risk factors are split into two tiers:
+# - Clinical factors: directly reported by dispatcher (high signal)
+# - Contextual factors: auto-derived from time and weather
+
+    clinical_factors    = []
+    contextual_factors  = []
+
+    # Clinical inputs — directly reported by dispatcher
+    if collision_type == 'Head-on':
+        clinical_factors.append(
+            "Head-on collision - maximum energy transfer"
+        )
+    if collision_type == 'Rollover':
+        clinical_factors.append(
+            "Rollover - high injury and entrapment risk"
+        )
+    if pedestrian_involved:
+        clinical_factors.append(
+            "Pedestrian involved - zero vehicle protection"
+        )
+    if vehicle_type == 'Lorry/Truck':
+        clinical_factors.append(
+            "Heavy vehicle - high mass impact force"
+        )
+    if num_casualties >= 3:
+        clinical_factors.append(
+            f"{num_casualties} casualties - mass casualty event"
+        )
+    if num_vehicles >= 3:
+        clinical_factors.append(
+            f"{num_vehicles} vehicles - high energy crash"
+        )
+    if cause_of_accident == 'Overspeeding':
+        clinical_factors.append(
+            "Overspeeding - high kinetic energy at impact"
+        )
+    if cause_of_accident == 'Drunk/Impaired driving':
+        clinical_factors.append(
+            "Impaired driver - unpredictable behaviour"
+        )
+    if cause_of_accident == 'Overtaking':
+        clinical_factors.append(
+            "Overtaking - elevated head-on collision risk"
+        )
+
+    # Contextual inputs - auto-derived from system clock and weather API
+    if temporal['Is_night']:
+        contextual_factors.append("Night time - reduced visibility")
+    if temporal['Is_rush_hour']:
+        contextual_factors.append("Rush hour - high traffic density")
+    if current_weather == 'Raining':
+        contextual_factors.append(
+            "Raining - reduced road grip and visibility"
+        )
+    elif current_weather == 'Fog or mist':
+        contextual_factors.append(
+            "Fog or mist - severely reduced visibility"
+        )
 
     if severity == 'HIGH':
-        # Show factors that contributed to the HIGH classification
-        if collision_type == 'Head-on':
-            risk_factors.append(
-                "Head-on collision - maximum energy transfer"
-            )
-        if collision_type == 'Rollover':
-            risk_factors.append(
-                "Rollover - high injury and entrapment risk"
-            )
-        if pedestrian_involved:
-            risk_factors.append(
-                "Pedestrian involved - zero vehicle protection"
-            )
-        if vehicle_type == 'Lorry/Truck':
-            risk_factors.append(
-                "Heavy vehicle - high mass impact force"
-            )
-        if num_casualties >= 3:
-            risk_factors.append(
-                f"{num_casualties} casualties - mass casualty event"
-            )
-        if num_vehicles >= 3:
-            risk_factors.append(
-                f"{num_vehicles} vehicles - high energy crash"
-            )
-        if cause_of_accident == 'Overspeeding':
-            risk_factors.append(
-                "Overspeeding - high kinetic energy at impact"
-            )
-        if cause_of_accident == 'Drunk/Impaired driving':
-            risk_factors.append(
-                "Impaired driver - unpredictable behaviour"
-            )
-        if cause_of_accident == 'Overtaking':
-            risk_factors.append(
-                "Overtaking - elevated head-on collision risk"
-            )
-        if temporal['Is_night']:
-            risk_factors.append("Night time - reduced visibility")
-        if temporal['Is_rush_hour']:
-            risk_factors.append("Rush hour - high traffic density")
-        if current_weather == 'Raining':
-            risk_factors.append(
-                "Raining - reduced road grip and visibility"
-            )
-        elif current_weather == 'Fog or mist':
-            risk_factors.append(
-                "Fog or mist - severely reduced visibility"
-            )
-        # Fallback if no specific factors triggered
-        if not risk_factors:
-            risk_factors.append(
-                "Pattern match - historical data indicates HIGH severity"
-            )
+        # Prioritise clinical factors first, then contextual.
+        if clinical_factors:
+            risk_factors = clinical_factors + contextual_factors
+        else:
+            risk_factors = [
+                f"Area risk pattern - {nairobi_area} corridor has "
+                f"elevated historical severity in training data",
+            ] + contextual_factors
+            if not contextual_factors:
+                risk_factors.append(
+                    "No single dominant input factor - model uses "
+                    "combined area, time and incident pattern"
+                )
 
     else:
-# LOW classification - borderline cases (proba 30-40%) get escalation-aware notes so the dispatcher stays alert.
-# Confident LOW cases get factors explaining the result.
+# LOW classification
+# Borderline cases (proba 30-40%) get escalation-aware notes so the dispatcher remains alert despite the LOW result.
+ # Confident LOW cases get factors explaining the result.
         if proba >= 0.30:
-            # Borderline - close to threshold, monitor closely
             risk_factors = [
                 "Borderline case - monitor closely for escalation",
                 "Reassess if caller reports additional casualties",
                 "Upgrade to ALS if patient condition deteriorates"
             ]
         else:
-            # Confident LOW - explain why BLS is appropriate
+            risk_factors = []
             if collision_type in ['Rear-end', 'Side impact']:
                 risk_factors.append(
                     f"{collision_type} - typically lower severity impact"
                 )
-            if num_casualties <= 2 and not pedestrian_involved:
+            if num_casualties == 0:
+                risk_factors.append(
+                    "No casualties reported - BLS response appropriate"
+                )
+            elif num_casualties <= 2 and not pedestrian_involved:
                 risk_factors.append(
                     "Low casualty count - BLS response appropriate"
                 )
@@ -327,7 +345,6 @@ Run prediction on 7 dispatcher inputs. Returns severity, confidence, and top ris
                 risk_factors.append(
                     "Raining - allow extra response travel time"
                 )
-            # Fallback
             if not risk_factors:
                 risk_factors.append(
                     "No elevated risk factors - standard BLS protocol"

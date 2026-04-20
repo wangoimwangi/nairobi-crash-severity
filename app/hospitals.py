@@ -1,52 +1,62 @@
 # ============================================================
 # hospitals.py
-# Nairobi area to Addis Ababa dataset mapping
-# Hospital lookup by Nairobi area
-# Geographic mapping layer — UI shows Nairobi context
-# Model receives Addis Ababa equivalent values
+# Accident Severity Classification System
+# Nairobi Area Mapping & Hospital Lookup
 # ============================================================
 
-# ---- Nairobi area → Addis Ababa dataset mapping ----
-# Maps Nairobi districts to equivalent Addis Ababa sub-cities
-# based on traffic density and infrastructure similarity
+# MAPPING RATIONALE:
+# The RTA training dataset uses generic land-use area categories, not geographic place names. 
+# The four area categories are: "Office areas", "Residential areas", "Outside rural areas", "Industrial areas", "base/reference category"
 
+# This mapping translates Nairobi-specific area names into these land-use categories, satisfying Functional Requirement iv
+# The hospital lookup is a separate layer that uses the original Nairobi area name (not the mapped category) to return the geographically nearest trauma centres for dispatcher use.
+# ============================================================
+
+
+# ---- Nairobi area to model feature category mapping ----
 NAIROBI_TO_ADDIS = {
-    # Central
-    "CBD"                                : "Arada",
-    "Upper Hill"                         : "Kirkos",
-    "Westlands"                          : "Bole",
-    "Parklands"                          : "Gulele",
+    # Central business districts - commercial land use
+    "CBD"                                : "Office areas",
+    "Upper Hill"                         : "Office areas",
+    "Westlands"                          : "Office areas",
+    "Jogoo Road"                         : "Office areas",
+    "Waiyaki Way"                        : "Office areas",
 
-    # Major Corridors
-    "Mombasa Road"                       : "Nifas Silk-Lafto",
-    "Langata/Ngong Road/Southern Bypass" : "Nifas Silk-Lafto",
-    "Thika Road/Kasarani"                : "Yeka",
-    "Waiyaki Way"                        : "Bole",
-    "Limuru Road"                        : "Yeka",
-    "Outer Ring Road"                    : "Lideta",
-    "Jogoo Road"                         : "Lideta",
+    # Major highways - outside rural / peri-urban corridors
+    # These roads have highway characteristics despite being within or near the city boundary
+    "Mombasa Road"                       : "Outside rural areas",
+    "Langata/Ngong Road/Southern Bypass" : "Outside rural areas",
+    "Thika Road/Kasarani"                : "Outside rural areas",
+    "Limuru Road"                        : "Outside rural areas",
+    "Outer Ring Road"                    : "Outside rural areas",
+    "Ruiru/Juja"                         : "Outside rural areas",
 
-    # Residential/Commercial
-    "Eastleigh/Jogoo Road"               : "Lideta",
-    "Karen"                              : "Bole",
-    "Kilimani"                           : "Kirkos",
-    "Lavington"                          : "Bole",
-    "South B/C"                          : "Nifas Silk-Lafto",
-    "Gigiri/Runda"                       : "Bole",
+    # Residential suburbs - low-to-medium density housing
+    "Kilimani"                           : "Residential areas",
+    "Parklands"                          : "Residential areas",
+    "Eastleigh/Jogoo Road"               : "Residential areas",
+    "Karen"                              : "Residential areas",
+    "Lavington"                          : "Residential areas",
+    "South B/C"                          : "Residential areas",
+    "Gigiri/Runda"                       : "Residential areas",
+    "Dagoretti"                          : "Residential areas",
+    "Kibera/Kawangware"                  : "Residential areas",
 
-    # Industrial/Outer
-    "Industrial Area"                    : "Akaki Kaliti",
-    "Embakasi/JKIA"                      : "Akaki Kaliti",
-    "Ruiru/Juja"                         : "Yeka",
-    "Dagoretti"                          : "Nifas Silk-Lafto",
-    "Kibera/Kawangware"                  : "Lideta",
+    # Industrial and logistics zones
+    "Industrial Area"                    : "Industrial areas",
+    "Embakasi/JKIA"                      : "Industrial areas",
 
-    # Fallback
-    "Other/Unknown"                      : "Arada"
+    # Fallback - base reference category
+    "Other/Unknown"                      : "Other"
 }
 
+
 # ---- Nairobi hospital lookup ----
-# Returns nearest trauma center based on area selected
+# Returns the two nearest trauma centres for a given Nairobi area. This lookup uses the original Nairobi area name  directly.
+
+# Primary   = closest major trauma facility with full emergency and surgical capability
+# Secondary = backup facility if primary is at capacity or unreachable due to traffic conditions
+
 HOSPITAL_LOOKUP = {
     # Central
     "CBD"                                : {
@@ -153,12 +163,21 @@ HOSPITAL_LOOKUP = {
 
 
 def get_addis_area(nairobi_area):
-    """Map Nairobi area to Addis Ababa dataset equivalent."""
-    return NAIROBI_TO_ADDIS.get(nairobi_area, "Arada")
+    """
+    Translate a Nairobi area name into the land-use category used in the training dataset.
+    This satisfies Functional Requirement iv  the internal mapping layer that ensures model feature space compatibility.
+    Defaults to 'Other' (base reference category) if the area is not found in the mapping table.
+    """
+    return NAIROBI_TO_ADDIS.get(nairobi_area, "Other")
 
 
 def get_hospitals(nairobi_area):
-    """Return nearest trauma centers for a Nairobi area."""
+    """
+    Return the nearest trauma centres for a given Nairobi area.
+    Nearest trauma centre recommendation based on dispatcher-entered location.
+    Returns a dict with 'primary' and 'secondary' hospital names.
+    Defaults to KNH and Nairobi Hospital if area not found.
+    """
     return HOSPITAL_LOOKUP.get(nairobi_area, {
         "primary"  : "Kenyatta National Hospital",
         "secondary": "Nairobi Hospital"
