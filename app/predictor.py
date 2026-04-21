@@ -300,19 +300,19 @@ Run prediction on 7 dispatcher inputs. Returns severity, confidence, and top ris
             risk_factors = clinical_factors + contextual_factors
         else:
             risk_factors = [
-                f"Area risk pattern - {nairobi_area} corridor has "
-                f"elevated historical severity in training data",
+                "Incident pattern - combined temporal and "
+                "contextual factors indicate elevated severity",
             ] + contextual_factors
             if not contextual_factors:
                 risk_factors.append(
-                    "No single dominant input factor - model uses "
-                    "combined area, time and incident pattern"
+                    "No single dominant input factor - "
+                    "model uses combined incident pattern"
                 )
 
     else:
 # LOW classification
 # Borderline cases (proba 30-40%) get escalation-aware notes so the dispatcher remains alert despite the LOW result.
- # Confident LOW cases get factors explaining the result.
+# Confident LOW cases get factors explaining the result.
         if proba >= 0.30:
             risk_factors = [
                 "Borderline case - monitor closely for escalation",
