@@ -3,7 +3,8 @@
 # Accident Severity Classification System (ASCS)
 # ============================================================
 # SYSTEM OVERVIEW:
-# This application classifies road traffic accident severity as HIGH or LOW using a Balanced Random Forest model trained  on the RTA Addis Ababa dataset as a proxy for Nairobi's emergency dispatch environment.
+# This application classifies road traffic accident severity as HIGH or LOW using a Balanced Random Forest model trained
+# on the RTA Addis Ababa dataset as a proxy for Nairobi's emergency dispatch environment.
 # Dispatcher inputs 7 fields → model derives features → outputs HIGH (ALS) or LOW (BLS) severity classification.
 # ============================================================
 
@@ -114,8 +115,18 @@ col_input, col_result = st.columns([1, 1.2], gap="large")
 
 # ════════════════════════════════════════════════════════════
 # LEFT COLUMN - INCIDENT INPUT
-# The dispatcher enters details reported by the caller at the accident scene. 
+# The dispatcher enters details reported by the caller at the accident scene.
 # All 7 fields map to features in the trained Balanced Random Forest model pipeline.
+#
+# DEFAULT VALUES reflect a minor incident profile:
+#   Karen (residential area), Rear-end collision, Car/Saloon,
+#   1 vehicle, 0 casualties, Unknown cause, no pedestrian.
+#
+# This mirrors how a real dispatcher starts an entry — with the
+# least severe assumptions — and escalates values as the caller
+# provides more detail. It also ensures the form opens in a
+# state that can produce a LOW classification without changes,
+# demonstrating both outcomes through normal dispatcher usage.
 # ════════════════════════════════════════════════════════════
 
 with col_input:
@@ -123,8 +134,8 @@ with col_input:
     st.markdown("*Enter details from the caller report*")
 
     # ── LOCATION ─────────────────────────────────────────────
-# Nairobi area is mapped to the land-use category used in the RTA training dataset (via hospitals.py).
-# Categories: Office areas, Residential areas, Outside rural areas, Industrial areas. This satisfies FR iv.
+    # Nairobi area is mapped to the land-use category used in the RTA training dataset (via hospitals.py).
+    # Categories: Office areas, Residential areas, Outside rural areas, Industrial areas. This satisfies FR iv.
 
     st.markdown("**Location**")
     nairobi_area = st.selectbox(
@@ -139,6 +150,7 @@ with col_input:
             "Industrial Area", "Embakasi/JKIA", "Ruiru/Juja",
             "Dagoretti", "Kibera/Kawangware", "Other/Unknown"
         ],
+        index=12,  # Karen — residential area, low-severity profile
         help="Select the nearest area to the accident location."
     )
     st.caption("Select the nearest area if exact location is not listed")
@@ -147,7 +159,8 @@ with col_input:
 
 
     # ── CRASH DYNAMICS ───────────────────────────────────────
-    # Collision type, vehicle type, number of vehicles, and casualties are direct model input features that inform the severity classification.
+    # Collision type, vehicle type, number of vehicles, and casualties are direct model input features
+    # that inform the severity classification.
 
     st.markdown("**Crash Dynamics**")
 
@@ -156,22 +169,24 @@ with col_input:
         collision_type = st.selectbox(
             "Type of Collision",
             options=["Head-on", "Rear-end", "Rollover",
-                     "Hit pedestrian", "Side impact", "Other"]
+                     "Hit pedestrian", "Side impact", "Other"],
+            index=1   # Rear-end — low-energy collision default
         )
         num_vehicles = st.number_input(
             "Number of Vehicles",
-            min_value=1, max_value=20, value=2
+            min_value=1, max_value=20, value=1
         )
     with col_b:
         vehicle_type = st.selectbox(
             "Type of Vehicle",
             options=["Car/Saloon", "Matatu/Minibus",
                      "Motorcycle/Boda Boda", "Lorry/Truck",
-                     "Bus", "Pickup/SUV", "Other"]
+                     "Bus", "Pickup/SUV", "Other"],
+            index=0   # Car/Saloon — standard passenger vehicle default
         )
         num_casualties = st.number_input(
             "Estimated Casualties",
-            min_value=0, max_value=50, value=1
+            min_value=0, max_value=50, value=0  # 0 casualties — minor incident default
         )
 
     st.markdown("<div style='margin: 1.8rem 0;'></div>", unsafe_allow_html=True)
@@ -187,6 +202,7 @@ with col_input:
         options=["Unknown", "Overspeeding", "Overtaking",
                  "Changing lanes unsafely", "Drunk driving",
                  "Mechanical failure", "Other"],
+        index=0,  # Unknown — default until caller confirms
         label_visibility="collapsed"
     )
 
@@ -200,6 +216,7 @@ with col_input:
     pedestrian_involved = st.radio(
         "Is a pedestrian involved?",
         options=["No", "Yes"],
+        index=0,
         horizontal=True
     )
 
@@ -225,17 +242,18 @@ with col_result:
 
     if classify_clicked:
 
-# ── MODEL PREDICTION ─────────────────────────────────
-# Step 1: Map Nairobi area to Addis Ababa dataset equivalent (proxy dataset mapping)
-# Step 2: Look up nearest hospitals for the area
-# Step 3: Run the prediction pipeline - the model internally derives all engineered features from the 7 dispatcher inputs + temporal +  weather data fetched automatically
-        
+        # ── MODEL PREDICTION ─────────────────────────────────
+        # Step 1: Map Nairobi area to Addis Ababa dataset equivalent (proxy dataset mapping)
+        # Step 2: Look up nearest hospitals for the area
+        # Step 3: Run the prediction pipeline - the model internally derives all engineered features
+        #         from the 7 dispatcher inputs + temporal + weather data fetched automatically
+
         addis_area = get_addis_area(nairobi_area)
         hospitals  = get_hospitals(nairobi_area)
 
         result = predict(
             area_addis          = addis_area,
-            nairobi_area        = nairobi_area, 
+            nairobi_area        = nairobi_area,
             vehicle_type        = vehicle_type,
             collision_type      = collision_type,
             num_vehicles        = int(num_vehicles),
@@ -251,10 +269,12 @@ with col_result:
         is_high      = severity == 'HIGH'
 
 
-# ── SEVERITY RESULT PANEL ─────────────────────────────
-# HIGH → ALS (Advanced Life Support): paramedics, trauma team, critical care protocol
-# LOW  → BLS (Basic Life Support): standard ambulance
-# The confidence score reflects the model's probability estimate. Threshold is set at 0.40 (optimised on the validation set using F2-score to prioritise recall minimising under-triage risk).
+        # ── SEVERITY RESULT PANEL ─────────────────────────────
+        # HIGH → ALS (Advanced Life Support): paramedics, trauma team, critical care protocol
+        # LOW  → BLS (Basic Life Support): standard ambulance
+        # The confidence score reflects the model's probability estimate.
+        # Threshold is set at 0.40 (optimised on the validation set using F2-score
+        # to prioritise recall — minimising under-triage risk).
 
         if is_high:
             st.markdown(f"""
@@ -280,10 +300,11 @@ with col_result:
 """, unsafe_allow_html=True)
 
 
- # ── HOSPITAL ALERT ────────────────────────────────────
-# Nearest trauma centres are looked up from a static mapping table in hospitals.py, keyed by Nairobi area.
-# Primary = closest major trauma facility.
-# Secondary = backup if primary is unavailable.
+        # ── HOSPITAL ALERT ────────────────────────────────────
+        # Nearest trauma centres are looked up from a static mapping table in hospitals.py,
+        # keyed by Nairobi area.
+        # Primary = closest major trauma facility.
+        # Secondary = backup if primary is unavailable.
 
         st.markdown(f"""
 <div class="hospital-box">
@@ -294,9 +315,9 @@ with col_result:
 """, unsafe_allow_html=True)
 
 
-# ── CONTRIBUTING RISK FACTORS ─────────────────────────
-# Risk factors are derived from the input combination and highlight why this incident was classified at this severity level.
-# Useful for dispatcher awareness.
+        # ── CONTRIBUTING RISK FACTORS ─────────────────────────
+        # Risk factors are derived from the input combination and highlight why this incident
+        # was classified at this severity level. Useful for dispatcher awareness.
 
         with st.expander("Contributing Risk Factors"):
             for factor in risk_factors:
@@ -306,8 +327,8 @@ with col_result:
             )
 
 
-# ── UPDATE SESSION HISTORY ────────────────────────────
-# Keeps the last 5 classifications for the dispatcher to review within the current session.
+        # ── UPDATE SESSION HISTORY ────────────────────────────
+        # Keeps the last 5 classifications for the dispatcher to review within the current session.
         st.session_state.history.insert(0, {
             'Time'      : now.strftime("%H:%M"),
             'Area'      : nairobi_area,
@@ -319,8 +340,8 @@ with col_result:
 
     else:
 
-# ── AWAITING STATE ────────────────────────────────────
-# Shown before any classification is made.
+        # ── AWAITING STATE ────────────────────────────────────
+        # Shown before any classification is made.
 
         st.markdown("""
 <div class="awaiting-box">
@@ -333,8 +354,8 @@ with col_result:
 """, unsafe_allow_html=True)
 
 
-# ── SESSION LOG ───────────────────────────────────────────
-# Visible on the right side — whether or not a classification has been run in this session.
+    # ── SESSION LOG ───────────────────────────────────────────
+    # Visible on the right side — whether or not a classification has been run in this session.
 
     st.markdown("<div style='margin: 2rem 0 0.5rem 0;'></div>",
                 unsafe_allow_html=True)
