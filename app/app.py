@@ -14,9 +14,13 @@ import os
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from pytz import timezone
 
 from predictor import predict, get_temporal_features, get_weather
 from hospitals import get_addis_area, get_hospitals
+
+# Nairobi timezone — East Africa Time (UTC+3)
+NAIROBI_TZ = timezone('Africa/Nairobi')
 
 # ── 1. PAGE CONFIGURATION ────────────────────────────────────
 
@@ -44,24 +48,27 @@ if 'history' not in st.session_state:
 
 
 # ── 4. LIVE TEMPORAL & WEATHER DATA ──────────────────────────
+# All times use Nairobi local time (EAT = UTC+3) explicitly.
+# This ensures correct display and correct model feature derivation
+# regardless of where Streamlit Cloud servers are located.
 
 temporal        = get_temporal_features()
-now             = datetime.now()
+now             = datetime.now(NAIROBI_TZ)
 time_str        = now.strftime("%H:%M")
 day_str         = now.strftime("%A, %d %B %Y")
 current_weather = get_weather()
 
 weather_str = {
     'Raining'    : 'Rain',
-    'Cloudy'     : ' Cloudy',
-    'Fog or mist': ' Fog',
+    'Cloudy'     : 'Cloudy',
+    'Fog or mist': 'Fog',
     'Normal'     : '☀️ Clear'
 }.get(current_weather, '☀️ Clear')
 
 flags = []
-if temporal.get('Is_night'):     flags.append(" Night")
-if temporal.get('Is_rush_hour'): flags.append(" Rush hour")
-if temporal.get('Is_weekend'):   flags.append(" Weekend")
+if temporal.get('Is_night'):     flags.append("Night")
+if temporal.get('Is_rush_hour'): flags.append("Rush hour")
+if temporal.get('Is_weekend'):   flags.append("Weekend")
 flag_str = " · ".join(flags) if flags else "Normal conditions"
 
 
@@ -79,6 +86,8 @@ st.markdown(f"""
 
 
 # ── 6. AUTO-INFO BAR ─────────────────────────────────────────
+# Displays live Nairobi time, date, weather and conditions.
+# The pulsing cyan dot signals the system is active.
 
 st.markdown(f"""
 <div class="auto-info">
@@ -104,7 +113,7 @@ col_input, col_result = st.columns([1, 1.2], gap="large")
 #   Karen (residential), Rear-end, Car/Saloon, 1 vehicle,
 #   0 casualties, Unknown cause, no pedestrian.
 #
-# Mirrors real dispatcher workflow start with least severe
+# Mirrors real dispatcher workflow — start with least severe
 # assumptions and escalate as the caller provides detail.
 # ════════════════════════════════════════════════════════════
 
@@ -226,11 +235,6 @@ with col_result:
         is_high       = severity == 'HIGH'
 
         # ── SEVERITY RESULT PANEL ─────────────────────────────
-        # HIGH → ALS (Advanced Life Support)
-        # LOW  → BLS (Basic Life Support)
-        # Threshold: 0.40 (F2-optimised — maximises recall,
-        # minimises under-triage in emergency dispatch context)
-
         if is_high:
             st.markdown(f"""
 <div class="result-high">
@@ -244,7 +248,7 @@ with col_result:
 """, unsafe_allow_html=True)
         else:
             severity_label = (
-                " LOW SEVERITY — BORDERLINE"
+                "LOW SEVERITY - BORDERLINE"
                 if is_borderline else
                 "🟢 LOW SEVERITY"
             )
@@ -262,19 +266,14 @@ with col_result:
         # ── HOSPITAL ALERT ────────────────────────────────────
         st.markdown(f"""
 <div class="hospital-box">
-    <strong> Alert Nearest Trauma Centre — {nairobi_area}</strong>
+    <strong> Alert Nearest Trauma Centre - {nairobi_area}</strong>
     <span>Primary: </span><b>{hospitals['primary']}</b><br>
     <span>Secondary: </span><b>{hospitals['secondary']}</b>
 </div>
 """, unsafe_allow_html=True)
 
         # ── CONTRIBUTING RISK FACTORS ─────────────────────────
-        # Explains WHY the model produced this classification.
-        # HIGH: inputs that elevated severity probability.
-        # LOW:  inputs that kept probability below threshold.
-        # Contextual: auto-derived time and weather signals.
-
-        with st.expander(" Contributing Risk Factors", expanded=True):
+        with st.expander("Contributing Risk Factors", expanded=True):
             for factor in risk_factors:
                 st.markdown(f"• {factor}")
             st.caption(
@@ -297,7 +296,7 @@ with col_result:
 
         st.markdown("""
 <div class="awaiting-box">
-    <div style="font-size:2.5rem;margin-bottom:1rem"></div>
+    <div style="font-size:2.5rem;margin-bottom:1rem"> </div>
     <div style="font-weight:600;color:#94a3b8;font-size:1.1rem">
         Awaiting Incident Report
     </div>

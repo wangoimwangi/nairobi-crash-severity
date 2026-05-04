@@ -10,6 +10,7 @@ import numpy as np
 import requests
 import streamlit as st
 from datetime import datetime
+from pytz import timezone
 import json
 import os
 
@@ -35,6 +36,9 @@ model    = load_model()
 metadata = load_metadata()
 
 THRESHOLD = metadata['optimal_thresholds']['Balanced Random Forest']
+
+# Nairobi timezone — East Africa Time (UTC+3)
+NAIROBI_TZ = timezone('Africa/Nairobi')
 
 
 # ---- Modal defaults ----
@@ -155,8 +159,13 @@ def get_weather():
 
 
 def get_temporal_features():
-    """Auto-derive temporal features from system clock."""
-    now          = datetime.now()
+    """
+    Auto-derive temporal features from system clock.
+    Always uses Nairobi local time (EAT = UTC+3) regardless of
+    where the server is running, ensuring correct rush hour,
+    night-time, and weekend classification for Nairobi dispatch.
+    """
+    now          = datetime.now(NAIROBI_TZ)
     hour         = now.hour
     day_of_week  = now.strftime('%A')
     is_night     = 1 if (hour >= 20 or hour <= 5) else 0
@@ -188,7 +197,7 @@ def hydrate_features(area_addis, vehicle_type, collision_type,
 
     Tiered Input Architecture:
         - 7 high-variance features from dispatcher
-        - 6 temporal features auto-derived from system clock
+        - 6 temporal features auto-derived from Nairobi local clock
         - 1 weather feature cached from Open-Meteo API (10 min TTL)
         - 14 low-impact features filled with validated neutral defaults
     """
@@ -251,9 +260,7 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     # Explains WHY the model produced this classification.
     # HIGH factors: dispatcher inputs that elevated severity probability.
     # LOW factors:  dispatcher inputs that kept probability below threshold.
-    # Contextual:   auto-derived time and weather signals.
-    # Strictly explanatory — the dispatch decision (ALS/BLS) and hospital
-    # alert are communicated separately in the UI.
+    # Contextual:   auto-derived Nairobi time and weather signals.
     # ================================================================
 
     clinical_high  = []
@@ -263,107 +270,107 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     # ---- HIGH-signal clinical inputs ----
     if collision_type in ['Head-on', 'Rollover']:
         clinical_high.append(
-            f"{collision_type} — maximum kinetic energy transfer, high entrapment risk"
+            f"{collision_type} - maximum kinetic energy transfer, high entrapment risk"
         )
     if pedestrian_involved:
         clinical_high.append(
-            "Pedestrian involved — no vehicle protection for victim"
+            "Pedestrian involved - no vehicle protection for victim"
         )
     if vehicle_type == 'Lorry/Truck':
         clinical_high.append(
-            "Heavy goods vehicle — high mass multiplies impact force"
+            "Heavy goods vehicle - high mass multiplies impact force"
         )
     if vehicle_type in ['Matatu/Minibus', 'Bus']:
         clinical_high.append(
-            "Public service vehicle — high occupancy increases casualty risk"
+            "Public service vehicle - high occupancy increases casualty risk"
         )
     if num_casualties >= 5:
         clinical_high.append(
-            f"{num_casualties} casualties — mass casualty threshold exceeded"
+            f"{num_casualties} casualties - mass casualty threshold exceeded"
         )
     elif num_casualties >= 3:
         clinical_high.append(
-            f"{num_casualties} casualties — exceeds single BLS unit capacity"
+            f"{num_casualties} casualties - exceeds single BLS unit capacity"
         )
     elif num_casualties >= 1 and pedestrian_involved:
         clinical_high.append(
-            f"{num_casualties} casualty with pedestrian involvement — elevated injury severity"
+            f"{num_casualties} casualty with pedestrian involvement - elevated injury severity"
         )
     if num_vehicles >= 3:
         clinical_high.append(
-            f"{num_vehicles} vehicles — multi-vehicle high-energy crash"
+            f"{num_vehicles} vehicles - multi-vehicle high-energy crash"
         )
     if cause_of_accident == 'Overspeeding':
         clinical_high.append(
-            "Overspeeding — kinetic energy scales with square of velocity"
+            "Overspeeding - kinetic energy scales with square of velocity"
         )
     if cause_of_accident == 'Drunk driving':
         clinical_high.append(
-            "Impaired driver — unpredictable behaviour, delayed braking"
+            "Impaired driver - unpredictable behaviour, delayed braking"
         )
     if cause_of_accident == 'Overtaking':
         clinical_high.append(
-            "Overtaking manoeuvre — elevated frontal collision risk"
+            "Overtaking manoeuvre - elevated frontal collision risk"
         )
     if collision_type == 'Hit pedestrian':
         clinical_high.append(
-            "Pedestrian strike — unprotected road user, high trauma probability"
+            "Pedestrian strike - unprotected road user, high trauma probability"
         )
 
     # ---- LOW-signal clinical inputs ----
     if collision_type == 'Rear-end':
         clinical_low.append(
-            "Rear-end collision — lower energy transfer than frontal impact"
+            "Rear-end collision - lower energy transfer than frontal impact"
         )
     if collision_type == 'Side impact':
         clinical_low.append(
-            "Side impact — vehicle-to-vehicle contact without head-on force"
+            "Side impact - vehicle-to-vehicle contact without head-on force"
         )
     if num_casualties == 0:
         clinical_low.append(
-            "No casualties reported — incident below injury threshold"
+            "No casualties reported - incident below injury threshold"
         )
     elif num_casualties <= 2 and not pedestrian_involved:
         clinical_low.append(
-            f"{num_casualties} casualty — within single BLS unit response capacity"
+            f"{num_casualties} casualty - within single BLS unit response capacity"
         )
     if num_vehicles == 1:
         clinical_low.append(
-            "Single vehicle — contained incident, no multi-vehicle energy transfer"
+            "Single vehicle - contained incident, no multi-vehicle energy transfer"
         )
     if vehicle_type == 'Car/Saloon':
         clinical_low.append(
-            "Passenger car — standard crumple zone and restraint systems present"
+            "Passenger car - standard crumple zone and restraint systems present"
         )
     if vehicle_type == 'Pickup/SUV':
         clinical_low.append(
-            "Light commercial vehicle — reinforced frame, lower occupancy risk"
+            "Light commercial vehicle - reinforced frame, lower occupancy risk"
         )
     if not pedestrian_involved:
         clinical_low.append(
-            "No pedestrian involvement — all parties have vehicle protection"
+            "No pedestrian involvement - all parties have vehicle protection"
         )
     if cause_of_accident == 'Unknown':
         clinical_low.append(
-            "Cause unconfirmed — no high-energy trigger reported by caller"
+            "Cause unconfirmed - no high-energy trigger reported by caller"
         )
 
-    # ---- Contextual signals ----
+    # ---- Contextual signals (Nairobi local time + weather) ----
     if temporal['Is_night']:
         contextual.append(
-            "Night-time — reduced visibility elevates injury severity risk"
+            "Night-time - reduced visibility elevates injury severity risk"
         )
     if temporal['Is_rush_hour']:
         contextual.append(
-            "Rush hour — high traffic density increases multi-vehicle risk"
+            "Rush hour - high traffic density increases multi-vehicle risk"
         )
     if current_weather == 'Raining':
         contextual.append(
-            "Active rainfall — reduced road grip and stopping distance"
+            "Active rainfall - reduced road grip and stopping distance"
         )
     elif current_weather == 'Fog or mist':
         contextual.append(
-            "Fog conditions — severely reduced visibility at scene"
+            "Fog conditions - severely reduced visibility at scene"
         )
 
     # ---- Assemble final risk factors ----
@@ -371,28 +378,22 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         if clinical_high:
             risk_factors = (clinical_high + contextual)[:3]
         else:
-            # Fallback: no single dominant HIGH signal but model still
-            # classified HIGH — explain using what IS present
             present = []
             if num_vehicles >= 2:
                 present.append(
-                    f"{num_vehicles} vehicles involved — combined incident profile"
+                    f"{num_vehicles} vehicles involved - combined incident profile"
                 )
             if num_casualties >= 1:
                 present.append(
-                    f"{num_casualties} casualty reported — injury presence noted"
+                    f"{num_casualties} casualty reported - injury presence noted"
                 )
             if contextual:
                 present.extend(contextual)
-            if present:
-                risk_factors = present[:3]
-            else:
-                risk_factors = [
-                    "Multiple incident factors collectively exceed LOW threshold",
-                    "Model detects HIGH-severity pattern from combined inputs"
-                ]
+            risk_factors = present[:3] if present else [
+                "Multiple incident factors collectively exceed LOW threshold",
+                "Model detects HIGH-severity pattern from combined inputs"
+            ]
     else:
-        # LOW — explain what kept probability below threshold
         if clinical_low:
             risk_factors = (clinical_low + contextual)[:3]
         else:
