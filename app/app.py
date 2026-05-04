@@ -52,16 +52,16 @@ day_str         = now.strftime("%A, %d %B %Y")
 current_weather = get_weather()
 
 weather_str = {
-    'Raining'    : '🌧️ Rain',
-    'Cloudy'     : '☁️ Cloudy',
-    'Fog or mist': '🌫️ Fog',
+    'Raining'    : 'Rain',
+    'Cloudy'     : ' Cloudy',
+    'Fog or mist': ' Fog',
     'Normal'     : '☀️ Clear'
 }.get(current_weather, '☀️ Clear')
 
 flags = []
-if temporal.get('Is_night'):     flags.append("🌙 Night")
-if temporal.get('Is_rush_hour'): flags.append("🚦 Rush hour")
-if temporal.get('Is_weekend'):   flags.append("📅 Weekend")
+if temporal.get('Is_night'):     flags.append(" Night")
+if temporal.get('Is_rush_hour'): flags.append(" Rush hour")
+if temporal.get('Is_weekend'):   flags.append(" Weekend")
 flag_str = " · ".join(flags) if flags else "Normal conditions"
 
 
@@ -104,7 +104,7 @@ col_input, col_result = st.columns([1, 1.2], gap="large")
 #   Karen (residential), Rear-end, Car/Saloon, 1 vehicle,
 #   0 casualties, Unknown cause, no pedestrian.
 #
-# Mirrors real dispatcher workflow — start with least severe
+# Mirrors real dispatcher workflow start with least severe
 # assumptions and escalate as the caller provides detail.
 # ════════════════════════════════════════════════════════════
 
@@ -244,7 +244,7 @@ with col_result:
 """, unsafe_allow_html=True)
         else:
             severity_label = (
-                "⚠️ LOW SEVERITY — BORDERLINE"
+                " LOW SEVERITY — BORDERLINE"
                 if is_borderline else
                 "🟢 LOW SEVERITY"
             )
@@ -262,7 +262,7 @@ with col_result:
         # ── HOSPITAL ALERT ────────────────────────────────────
         st.markdown(f"""
 <div class="hospital-box">
-    <strong>🏥 Alert Nearest Trauma Centre — {nairobi_area}</strong>
+    <strong> Alert Nearest Trauma Centre — {nairobi_area}</strong>
     <span>Primary: </span><b>{hospitals['primary']}</b><br>
     <span>Secondary: </span><b>{hospitals['secondary']}</b>
 </div>
@@ -274,7 +274,7 @@ with col_result:
         # LOW:  inputs that kept probability below threshold.
         # Contextual: auto-derived time and weather signals.
 
-        with st.expander("📊 Contributing Risk Factors", expanded=True):
+        with st.expander(" Contributing Risk Factors", expanded=True):
             for factor in risk_factors:
                 st.markdown(f"• {factor}")
             st.caption(
@@ -297,7 +297,7 @@ with col_result:
 
         st.markdown("""
 <div class="awaiting-box">
-    <div style="font-size:2.5rem;margin-bottom:1rem">🚨</div>
+    <div style="font-size:2.5rem;margin-bottom:1rem"></div>
     <div style="font-weight:600;color:#94a3b8;font-size:1.1rem">
         Awaiting Incident Report
     </div>
@@ -309,7 +309,7 @@ with col_result:
     st.markdown("<div style='margin: 2rem 0 0.5rem 0;'></div>",
                 unsafe_allow_html=True)
 
-    with st.expander("🕐 View Recent Classifications Log", expanded=False):
+    with st.expander(" View Recent Classifications Log", expanded=False):
         if st.session_state.history:
             st.table(pd.DataFrame(st.session_state.history))
         else:
