@@ -61,11 +61,6 @@ info_bar_placeholder = st.empty()
 
 col_input, col_result = st.columns([1, 1.2], gap="large")
 
-
-# ════════════════════════════════════════════════════════════
-# LEFT COLUMN — INCIDENT INPUT
-# ════════════════════════════════════════════════════════════
-
 with col_input:
     st.subheader("Incident Details")
     st.markdown("*Enter details from the caller report*")
@@ -156,7 +151,7 @@ day_str         = now.strftime("%A, %d %B %Y")
 temporal        = get_temporal_features()
 current_weather = get_weather(nairobi_area)
 
-weather_str = {
+weather_display = {
     'Raining'    : 'Rain',
     'Cloudy'     : 'Cloudy',
     'Fog or mist': 'Fog',
@@ -164,26 +159,24 @@ weather_str = {
 }.get(current_weather, 'Clear')
 
 flags = []
-if temporal.get('Is_night'):     flags.append(" Night")
-if temporal.get('Is_rush_hour'): flags.append(" Rush hour")
-if temporal.get('Is_weekend'):   flags.append(" Weekend")
+if temporal.get('Is_night'):     flags.append("Night")
+if temporal.get('Is_rush_hour'): flags.append("Rush hour")
+if temporal.get('Is_weekend'):   flags.append("Weekend")
 
-flag_section = f"&nbsp;·&nbsp; {' · '.join(flags)}" if flags else ""
+# Build info bar as a flat list — no conditional HTML fragments
+# which caused the stray </span> rendering bug
+info_parts = [f"<strong>{time_str}</strong>", day_str, weather_display]
+info_parts.extend(flags)
+info_content = " &nbsp;·&nbsp; ".join(info_parts)
 
-info_bar_placeholder.markdown(f"""
-<div class="auto-info">
-    <span>
-        <strong>{time_str}</strong>
-        &nbsp;·&nbsp; {day_str}
-        &nbsp;·&nbsp; {weather_str}
-        {flag_section}
-    </span>
-</div>
-""", unsafe_allow_html=True)
+info_bar_placeholder.markdown(
+    f'<div class="auto-info"><span>{info_content}</span></div>',
+    unsafe_allow_html=True
+)
 
 
 # ════════════════════════════════════════════════════════════
-# RIGHT COLUMN - CLASSIFICATION OUTPUT
+# RIGHT COLUMN — CLASSIFICATION OUTPUT
 # ════════════════════════════════════════════════════════════
 
 with col_result:
@@ -242,7 +235,7 @@ with col_result:
 
         st.markdown(f"""
 <div class="hospital-box">
-    <strong> Alert Nearest Trauma Centre — {nairobi_area}</strong>
+    <strong> Alert Nearest Trauma Centre - {nairobi_area}</strong>
     <span>Primary: </span><b>{hospitals['primary']}</b><br>
     <span>Secondary: </span><b>{hospitals['secondary']}</b>
 </div>
@@ -257,9 +250,7 @@ with col_result:
         with st.expander(" Contributing Risk Factors", expanded=True):
             for factor in risk_factors:
                 st.markdown(f"• {factor}")
-            st.caption(
-                f"Context: {weather_used} · {time_context}"
-            )
+            st.caption(f"Context: {weather_used} · {time_context}")
 
         st.session_state.history.insert(0, {
             'Time'      : now.strftime("%H:%M"),
@@ -274,7 +265,7 @@ with col_result:
 
         st.markdown("""
 <div class="awaiting-box">
-    <div style="font-size:2.5rem;margin-bottom:1rem"> </div>
+    <div style="font-size:2.5rem;margin-bottom:1rem"></div>
     <div style="font-weight:600;color:#94a3b8;font-size:1.1rem">
         Awaiting Incident Report
     </div>

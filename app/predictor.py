@@ -115,6 +115,10 @@ COLLISION_MAPPING = {
     'Other'          : 'Other'
 }
 
+# ---- High-severity collision types (UI labels) ----
+# Used for risk factor logic — matches dispatcher UI labels directly,
+# not the mapped training dataset values.
+HIGH_SEVERITY_COLLISIONS = {'Head-on', 'Rollover', 'Hit pedestrian'}
 
 # ---- Cause of accident mapping ----
 CAUSE_MAPPING = {
@@ -129,12 +133,17 @@ CAUSE_MAPPING = {
 }
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_weather(nairobi_area: str = "Other/Unknown") -> str:
     """
     Fetch live weather for the specific Nairobi area using Open-Meteo API.
     Uses per-area GPS coordinates so weather reflects the actual microclimate
-    at the incident location. Cached 10 min per area. Falls back to Normal.
+    at the incident location. Cached 5 minutes per area (reduced from 10 to
+    capture fast-changing Nairobi weather more accurately).
+    Falls back to Normal if API unavailable.
+
+    Rain is only reported when BOTH precipitation > 0 AND a precipitation
+    weathercode is active — avoids false positives from stale API state.
     """
     lat, lon = AREA_COORDINATES.get(nairobi_area, (-1.2921, 36.8219))
     url = (
@@ -148,12 +157,19 @@ def get_weather(nairobi_area: str = "Other/Unknown") -> str:
         data     = response.json()
         precip   = data['current']['precipitation']
         code     = data['current']['weathercode']
-        if precip > 0 or code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+
+        rain_codes = {51, 53, 55, 61, 63, 65, 80, 81, 82}
+        fog_codes  = {45, 48}
+        cloud_codes = {71, 73, 75, 77, 3}
+
+        # Require BOTH precipitation > 0 AND a rain code to report Rain
+        # This prevents false positives when code and precip disagree
+        if precip > 0 and code in rain_codes:
             return 'Raining'
-        elif code in [71, 73, 75, 77]:
-            return 'Cloudy'
-        elif code in [45, 48]:
+        elif code in fog_codes:
             return 'Fog or mist'
+        elif code in cloud_codes:
+            return 'Cloudy'
         else:
             return 'Normal'
     except Exception:
@@ -254,7 +270,11 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     contextual     = []
 
     # ---- HIGH-signal clinical inputs ----
-    if collision_type in ['Head-on', 'Rollover']:
+    # NOTE: checks use dispatcher UI labels (collision_type, vehicle_type etc.)
+    # not the mapped training dataset values — these are the original strings
+    # the dispatcher selected, preserved through the predict() call.
+
+    if collision_type in HIGH_SEVERITY_COLLISIONS:
         clinical_high.append(
             f"{collision_type} — maximum kinetic energy transfer, high entrapment risk"
         )
@@ -297,10 +317,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     if cause_of_accident == 'Overtaking':
         clinical_high.append(
             "Overtaking manoeuvre — elevated frontal collision risk"
-        )
-    if collision_type == 'Hit pedestrian':
-        clinical_high.append(
-            "Pedestrian strike — unprotected road user, high trauma probability"
         )
 
     # ---- LOW-signal clinical inputs ----
@@ -352,11 +368,11 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         )
     if current_weather == 'Raining':
         contextual.append(
-            f"Raining at {nairobi_area} — reduced road grip and stopping distance"
+            "Rain at incident location — reduced road grip and stopping distance"
         )
     elif current_weather == 'Fog or mist':
         contextual.append(
-            f"Fog at {nairobi_area} — severely reduced visibility at scene"
+            "Fog at incident location — severely reduced visibility at scene"
         )
 
     # ---- Assemble final risk factors ----
@@ -384,11 +400,19 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
                 "No dominant HIGH-severity features detected in caller report"
             ]
 
+    # ---- Weather display label (clean, no "Raining" — use "Rain") ----
+    weather_display = {
+        'Raining'    : 'Rain',
+        'Cloudy'     : 'Cloudy',
+        'Fog or mist': 'Fog',
+        'Normal'     : 'Clear'
+    }.get(current_weather, 'Clear')
+
     return {
         'severity'     : severity,
         'confidence'   : confidence,
         'probability'  : proba,
         'risk_factors' : risk_factors,
-        'weather'      : current_weather,
+        'weather'      : weather_display,
         'is_borderline': 0.35 <= proba < THRESHOLD
     }
