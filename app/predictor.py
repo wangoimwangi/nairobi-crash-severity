@@ -104,6 +104,8 @@ VEHICLE_MAPPING = {
 
 
 # ---- Collision type mapping ----
+# Head-on corrected from 'Collision with roadside-parked vehicles'
+# (LOW in training data) to 'Rollover' — HIGH-severity proxy.
 COLLISION_MAPPING = {
     'Head-on'        : 'Rollover',
     'Rear-end'       : 'Rear-end',
@@ -251,6 +253,19 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     current_weather = get_weather(nairobi_area)
     temporal        = get_temporal_features()
 
+    # ================================================================
+    # CONTRIBUTING RISK FACTORS
+    # HIGH factors: inputs that elevated severity probability.
+    # LOW factors:  inputs that kept probability below threshold.
+    # Contextual:   Nairobi local time and weather signals.
+    #
+    # Rule: factors must always match and support the classification.
+    # HIGH result → only show HIGH factors.
+    # LOW result  → only show LOW factors.
+    # For borderline HIGH (0.40-0.55): show top HIGH signal + top
+    # mitigating LOW factor for dispatcher situational awareness.
+    # ================================================================
+
     clinical_high  = []
     clinical_low   = []
     contextual     = []
@@ -330,6 +345,10 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         clinical_low.append(
             "Cause unconfirmed — no high-energy trigger reported by caller"
         )
+    if not pedestrian_involved:
+        clinical_low.append(
+            "No pedestrian involvement — all parties have vehicle protection"
+        )
 
     # ---- Contextual signals ----
     if temporal['Is_night']:
@@ -351,38 +370,30 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     if severity == 'HIGH':
         if clinical_high:
             if is_borderline_high and clinical_low:
-                # Borderline HIGH: show dominant HIGH signal + mitigating LOW
-                # factor so dispatcher has full situational awareness
+                # Borderline HIGH: show dominant HIGH signal + top
+                # mitigating LOW factor for dispatcher awareness
                 risk_factors = (clinical_high[:2] + clinical_low[:1] + contextual)[:3]
             else:
                 risk_factors = (clinical_high + contextual)[:3]
         else:
             present = []
             if num_vehicles >= 2:
-                present.append(f"{num_vehicles} vehicles involved — combined incident profile")
+                present.append(f"{num_vehicles} vehicles — combined incident profile")
             if num_casualties >= 1:
-                present.append(f"{num_casualties} casualty reported — injury presence noted")
+                present.append(f"{num_casualties} casualty — injury presence noted")
             if contextual:
                 present.extend(contextual)
             risk_factors = present[:3] if present else [
-                "Multiple incident factors collectively exceed severity threshold",
-                "Model detects HIGH-severity pattern from combined inputs"
+                "Multiple factors collectively exceed severity threshold"
             ]
     else:
-        # LOW classification
+        # LOW — only show LOW factors, never HIGH signals
+        # The classification is LOW so only LOW-supporting evidence shown
         if clinical_low:
             risk_factors = (clinical_low + contextual)[:3]
-        elif clinical_high:
-            # Serious inputs present but model still classified LOW —
-            # this is the model's conservative F2-threshold behaviour.
-            # Show the serious signals that were present so the dispatcher
-            # is aware, with a note that probability did not reach threshold.
-            risk_factors = [
-                f"Classified LOW at {confidence}% — below the 40% dispatch threshold",
-            ] + clinical_high[:2]
         else:
             risk_factors = [
-                "Minor incident profile — no high-severity features detected"
+                "Incident profile below HIGH severity threshold"
             ]
 
     # Weather display label
