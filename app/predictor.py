@@ -414,5 +414,5 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         'probability'  : proba,
         'risk_factors' : risk_factors,
         'weather'      : weather_display,
-        'is_borderline': 0.35 <= probability < THRESHOLD
+        'is_borderline': 0.35 <= proba < THRESHOLD
     }
