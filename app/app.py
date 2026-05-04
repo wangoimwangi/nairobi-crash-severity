@@ -52,12 +52,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ── 5. TWO-COLUMN LAYOUT ─────────────────────────────────────
-# The area selectbox is defined first inside the left column.
-# The info bar is rendered AFTER the selectbox so it can display
-# the selected area name and fetch location-specific weather.
-# Temporal features are read fresh on every page run — no caching —
-# so rush hour and night flags always reflect the current Nairobi time.
+# ── 5. INFO BAR PLACEHOLDER ──────────────────────────────────
+
+info_bar_placeholder = st.empty()
+
+
+# ── 6. TWO-COLUMN LAYOUT ─────────────────────────────────────
 
 col_input, col_result = st.columns([1, 1.2], gap="large")
 
@@ -70,7 +70,6 @@ with col_input:
     st.subheader("Incident Details")
     st.markdown("*Enter details from the caller report*")
 
-    # ── LOCATION ─────────────────────────────────────────────
     st.markdown("**Location**")
     nairobi_area = st.selectbox(
         "Area of Accident",
@@ -91,7 +90,6 @@ with col_input:
 
     st.markdown("<div style='margin: 1.8rem 0;'></div>", unsafe_allow_html=True)
 
-    # ── CRASH DYNAMICS ───────────────────────────────────────
     st.markdown("**Crash Dynamics**")
 
     col_a, col_b = st.columns(2)
@@ -121,7 +119,6 @@ with col_input:
 
     st.markdown("<div style='margin: 1.8rem 0;'></div>", unsafe_allow_html=True)
 
-    # ── CAUSE OF ACCIDENT ────────────────────────────────────
     st.markdown("**Primary Cause of Accident**")
     cause_of_accident = st.selectbox(
         "Cause of Accident",
@@ -134,7 +131,6 @@ with col_input:
 
     st.markdown("<div style='margin: 1.8rem 0;'></div>", unsafe_allow_html=True)
 
-    # ── PEDESTRIAN INVOLVEMENT ───────────────────────────────
     st.markdown("**Pedestrian Involvement**")
     pedestrian_involved = st.radio(
         "Is a pedestrian involved?",
@@ -145,7 +141,6 @@ with col_input:
 
     st.markdown("<div style='margin: 1.2rem 0;'></div>", unsafe_allow_html=True)
 
-    # ── CLASSIFY BUTTON ──────────────────────────────────────
     classify_clicked = st.button(
         "CLASSIFY SEVERITY",
         use_container_width=True,
@@ -153,45 +148,42 @@ with col_input:
     )
 
 
-# ── AUTO-INFO BAR ─────────────────────────────────────────────
-# Rendered AFTER the selectbox so nairobi_area is available.
-# temporal is read fresh here — no caching — so the clock,
-# rush hour flag, and night flag always reflect current Nairobi time.
-# Weather is fetched per selected area using location-specific coordinates.
+# ── FILL INFO BAR ─────────────────────────────────────────────
 
 now             = datetime.now(NAIROBI_TZ)
 time_str        = now.strftime("%H:%M")
 day_str         = now.strftime("%A, %d %B %Y")
-temporal        = get_temporal_features()          # always fresh — no @st.cache_data
-current_weather = get_weather(nairobi_area)        # per-area weather
+temporal        = get_temporal_features()
+current_weather = get_weather(nairobi_area)
 
 weather_str = {
     'Raining'    : 'Rain',
     'Cloudy'     : 'Cloudy',
     'Fog or mist': 'Fog',
-    'Normal'     : '☀️ Clear'
-}.get(current_weather, '☀️ Clear')
+    'Normal'     : 'Clear'
+}.get(current_weather, 'Clear')
 
 flags = []
-if temporal.get('Is_night'):     flags.append("Night")
-if temporal.get('Is_rush_hour'): flags.append("Rush hour")
-if temporal.get('Is_weekend'):   flags.append("Weekend")
-flag_str = " · ".join(flags) if flags else "Normal conditions"
+if temporal.get('Is_night'):     flags.append(" Night")
+if temporal.get('Is_rush_hour'): flags.append(" Rush hour")
+if temporal.get('Is_weekend'):   flags.append(" Weekend")
 
-st.markdown(f"""
+flag_section = f"&nbsp;·&nbsp; {' · '.join(flags)}" if flags else ""
+
+info_bar_placeholder.markdown(f"""
 <div class="auto-info">
     <span>
         <strong>{time_str}</strong>
         &nbsp;·&nbsp; {day_str}
-        &nbsp;·&nbsp; {weather_str} at {nairobi_area}
-        &nbsp;·&nbsp; {flag_str}
+        &nbsp;·&nbsp; {weather_str}
+        {flag_section}
     </span>
 </div>
 """, unsafe_allow_html=True)
 
 
 # ════════════════════════════════════════════════════════════
-# RIGHT COLUMN — CLASSIFICATION OUTPUT
+# RIGHT COLUMN - CLASSIFICATION OUTPUT
 # ════════════════════════════════════════════════════════════
 
 with col_result:
@@ -220,7 +212,6 @@ with col_result:
         is_borderline = result['is_borderline']
         is_high       = severity == 'HIGH'
 
-        # ── SEVERITY RESULT PANEL ─────────────────────────────
         if is_high:
             st.markdown(f"""
 <div class="result-high">
@@ -234,7 +225,7 @@ with col_result:
 """, unsafe_allow_html=True)
         else:
             severity_label = (
-                " LOW SEVERITY - BORDERLINE"
+                "LOW SEVERITY - BORDERLINE"
                 if is_borderline else
                 "🟢 LOW SEVERITY"
             )
@@ -249,7 +240,6 @@ with col_result:
 </div>
 """, unsafe_allow_html=True)
 
-        # ── HOSPITAL ALERT ────────────────────────────────────
         st.markdown(f"""
 <div class="hospital-box">
     <strong> Alert Nearest Trauma Centre — {nairobi_area}</strong>
@@ -258,17 +248,19 @@ with col_result:
 </div>
 """, unsafe_allow_html=True)
 
-        # ── CONTRIBUTING RISK FACTORS ─────────────────────────
+        time_context = (
+            'Night-time' if temporal.get('Is_night') else
+            'Rush hour'  if temporal.get('Is_rush_hour') else
+            'Daytime'
+        )
+
         with st.expander(" Contributing Risk Factors", expanded=True):
             for factor in risk_factors:
                 st.markdown(f"• {factor}")
             st.caption(
-                f"Context: {weather_used} at {nairobi_area} · "
-                f"{'Night-time' if temporal.get('Is_night') else 'Daytime'} · "
-                f"{'Rush hour' if temporal.get('Is_rush_hour') else 'Off-peak'}"
+                f"Context: {weather_used} · {time_context}"
             )
 
-        # ── UPDATE SESSION HISTORY ────────────────────────────
         st.session_state.history.insert(0, {
             'Time'      : now.strftime("%H:%M"),
             'Area'      : nairobi_area,
@@ -282,7 +274,7 @@ with col_result:
 
         st.markdown("""
 <div class="awaiting-box">
-    <div style="font-size:2.5rem;margin-bottom:1rem"></div>
+    <div style="font-size:2.5rem;margin-bottom:1rem"> </div>
     <div style="font-weight:600;color:#94a3b8;font-size:1.1rem">
         Awaiting Incident Report
     </div>
@@ -290,7 +282,6 @@ with col_result:
 </div>
 """, unsafe_allow_html=True)
 
-    # ── SESSION LOG ───────────────────────────────────────────
     st.markdown("<div style='margin: 2rem 0 0.5rem 0;'></div>",
                 unsafe_allow_html=True)
 
