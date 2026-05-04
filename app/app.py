@@ -3,9 +3,11 @@
 # Accident Severity Classification System (ASCS)
 # ============================================================
 # SYSTEM OVERVIEW:
-# This application classifies road traffic accident severity as HIGH or LOW using a Balanced Random Forest model trained
-# on the RTA Addis Ababa dataset as a proxy for Nairobi's emergency dispatch environment.
-# Dispatcher inputs 7 fields → model derives features → outputs HIGH (ALS) or LOW (BLS) severity classification.
+# Classifies road traffic accident severity as HIGH or LOW using
+# a Balanced Random Forest model trained on the RTA Addis Ababa
+# dataset as a proxy for Nairobi's emergency dispatch environment.
+# Dispatcher inputs 7 fields → model derives 28 features →
+# outputs HIGH (ALS) or LOW (BLS) severity classification.
 # ============================================================
 
 import os
@@ -13,7 +15,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Local modules
 from predictor import predict, get_temporal_features, get_weather
 from hospitals import get_addis_area, get_hospitals
 
@@ -28,8 +29,6 @@ st.set_page_config(
 
 
 # ── 2. LOAD EXTERNAL CSS ─────────────────────────────────────
-# CSS is kept in a separate style.css file for maintainability.
-# os.path.dirname(__file__) ensures the path works both locally and on Streamlit Cloud deployment.
 
 def load_css(path):
     with open(path, encoding="utf-8") as f:
@@ -39,25 +38,18 @@ load_css(os.path.join(os.path.dirname(__file__), "style.css"))
 
 
 # ── 3. SESSION STATE ─────────────────────────────────────────
-# Stores the last 5 classifications made in the current session.
-# Streamlit re-runs the script on every interaction, so session state is used to persist data across re-runs.
 
 if 'history' not in st.session_state:
     st.session_state.history = []
 
 
 # ── 4. LIVE TEMPORAL & WEATHER DATA ──────────────────────────
-# Temporal features (hour, day, rush hour, night, weekend) are auto-derived from the system clock - no dispatcher input needed.
-# Weather is fetched from the Open-Meteo API for Nairobi.
-# Both are passed to the model as engineered features.
 
 temporal        = get_temporal_features()
 now             = datetime.now()
 time_str        = now.strftime("%H:%M")
 day_str         = now.strftime("%A, %d %B %Y")
 current_weather = get_weather()
-
-# Map weather codes to display labels
 
 weather_str = {
     'Raining'    : '🌧️ Rain',
@@ -66,17 +58,14 @@ weather_str = {
     'Normal'     : '☀️ Clear'
 }.get(current_weather, '☀️ Clear')
 
-# Build operational condition flags for the info bar
-
 flags = []
 if temporal.get('Is_night'):     flags.append("🌙 Night")
 if temporal.get('Is_rush_hour'): flags.append("🚦 Rush hour")
-if temporal.get('Is_weekend'):   flags.append(" Weekend")
+if temporal.get('Is_weekend'):   flags.append("📅 Weekend")
 flag_str = " · ".join(flags) if flags else "Normal conditions"
 
 
 # ── 5. PAGE HEADER ───────────────────────────────────────────
-# Custom HTML header - styled via .main-header in style.css.
 
 st.markdown(f"""
 <div class="main-header">
@@ -90,9 +79,6 @@ st.markdown(f"""
 
 
 # ── 6. AUTO-INFO BAR ─────────────────────────────────────────
-# Displays live time, date, weather and conditions.
-# The pulsing cyan dot signals the system is active.
-# These values feed into the model automatically - the dispatcher does not need to enter time or weather manually.
 
 st.markdown(f"""
 <div class="auto-info">
@@ -107,26 +93,19 @@ st.markdown(f"""
 
 
 # ── 7. TWO-COLUMN LAYOUT ─────────────────────────────────────
-# Left column  : Dispatcher inputs (7 fields from caller report)
-# Right column : Classification result, hospital alert, risk factors, and session log — all output panels
 
 col_input, col_result = st.columns([1, 1.2], gap="large")
 
 
 # ════════════════════════════════════════════════════════════
-# LEFT COLUMN - INCIDENT INPUT
-# The dispatcher enters details reported by the caller at the accident scene.
-# All 7 fields map to features in the trained Balanced Random Forest model pipeline.
+# LEFT COLUMN — INCIDENT INPUT
 #
-# DEFAULT VALUES reflect a minor incident profile:
-#   Karen (residential area), Rear-end collision, Car/Saloon,
-#   1 vehicle, 0 casualties, Unknown cause, no pedestrian.
+# Default values reflect a minor incident profile (LOW):
+#   Karen (residential), Rear-end, Car/Saloon, 1 vehicle,
+#   0 casualties, Unknown cause, no pedestrian.
 #
-# This mirrors how a real dispatcher starts an entry — with the
-# least severe assumptions — and escalates values as the caller
-# provides more detail. It also ensures the form opens in a
-# state that can produce a LOW classification without changes,
-# demonstrating both outcomes through normal dispatcher usage.
+# Mirrors real dispatcher workflow — start with least severe
+# assumptions and escalate as the caller provides detail.
 # ════════════════════════════════════════════════════════════
 
 with col_input:
@@ -134,9 +113,6 @@ with col_input:
     st.markdown("*Enter details from the caller report*")
 
     # ── LOCATION ─────────────────────────────────────────────
-    # Nairobi area is mapped to the land-use category used in the RTA training dataset (via hospitals.py).
-    # Categories: Office areas, Residential areas, Outside rural areas, Industrial areas. This satisfies FR iv.
-
     st.markdown("**Location**")
     nairobi_area = st.selectbox(
         "Area of Accident",
@@ -150,18 +126,14 @@ with col_input:
             "Industrial Area", "Embakasi/JKIA", "Ruiru/Juja",
             "Dagoretti", "Kibera/Kawangware", "Other/Unknown"
         ],
-        index=12,  # Karen — residential area, low-severity profile
+        index=12,  # Karen — residential, LOW-profile default
         help="Select the nearest area to the accident location."
     )
     st.caption("Select the nearest area if exact location is not listed")
 
     st.markdown("<div style='margin: 1.8rem 0;'></div>", unsafe_allow_html=True)
 
-
     # ── CRASH DYNAMICS ───────────────────────────────────────
-    # Collision type, vehicle type, number of vehicles, and casualties are direct model input features
-    # that inform the severity classification.
-
     st.markdown("**Crash Dynamics**")
 
     col_a, col_b = st.columns(2)
@@ -170,7 +142,7 @@ with col_input:
             "Type of Collision",
             options=["Head-on", "Rear-end", "Rollover",
                      "Hit pedestrian", "Side impact", "Other"],
-            index=1   # Rear-end — low-energy collision default
+            index=1   # Rear-end default
         )
         num_vehicles = st.number_input(
             "Number of Vehicles",
@@ -182,36 +154,29 @@ with col_input:
             options=["Car/Saloon", "Matatu/Minibus",
                      "Motorcycle/Boda Boda", "Lorry/Truck",
                      "Bus", "Pickup/SUV", "Other"],
-            index=0   # Car/Saloon — standard passenger vehicle default
+            index=0   # Car/Saloon default
         )
         num_casualties = st.number_input(
             "Estimated Casualties",
-            min_value=0, max_value=50, value=0  # 0 casualties — minor incident default
+            min_value=0, max_value=50, value=0
         )
 
     st.markdown("<div style='margin: 1.8rem 0;'></div>", unsafe_allow_html=True)
 
-
     # ── CAUSE OF ACCIDENT ────────────────────────────────────
-    # Select Unknown if the caller cannot confirm the cause.
-    # This maps to the cause_of_accident feature in the pipeline.
-
     st.markdown("**Primary Cause of Accident**")
     cause_of_accident = st.selectbox(
         "Cause of Accident",
         options=["Unknown", "Overspeeding", "Overtaking",
                  "Changing lanes unsafely", "Drunk driving",
                  "Mechanical failure", "Other"],
-        index=0,  # Unknown — default until caller confirms
+        index=0,
         label_visibility="collapsed"
     )
 
     st.markdown("<div style='margin: 1.8rem 0;'></div>", unsafe_allow_html=True)
 
-
     # ── PEDESTRIAN INVOLVEMENT ───────────────────────────────
-    # Pedestrian involvement is a binary feature that significantly increases predicted severity probability.
-
     st.markdown("**Pedestrian Involvement**")
     pedestrian_involved = st.radio(
         "Is a pedestrian involved?",
@@ -222,9 +187,7 @@ with col_input:
 
     st.markdown("<div style='margin: 1.2rem 0;'></div>", unsafe_allow_html=True)
 
-
     # ── CLASSIFY BUTTON ──────────────────────────────────────
-    # Triggers the full prediction pipeline: inputs → feature engineering → model inference → result
     classify_clicked = st.button(
         "CLASSIFY SEVERITY",
         use_container_width=True,
@@ -233,20 +196,13 @@ with col_input:
 
 
 # ════════════════════════════════════════════════════════════
-# RIGHT COLUMN - CLASSIFICATION OUTPUT
-# All output panels live here: severity result, recommended action, hospital alert, risk factors, and session log.
+# RIGHT COLUMN — CLASSIFICATION OUTPUT
 # ════════════════════════════════════════════════════════════
 
 with col_result:
     st.subheader("Classification Result")
 
     if classify_clicked:
-
-        # ── MODEL PREDICTION ─────────────────────────────────
-        # Step 1: Map Nairobi area to Addis Ababa dataset equivalent (proxy dataset mapping)
-        # Step 2: Look up nearest hospitals for the area
-        # Step 3: Run the prediction pipeline - the model internally derives all engineered features
-        #         from the 7 dispatcher inputs + temporal + weather data fetched automatically
 
         addis_area = get_addis_area(nairobi_area)
         hospitals  = get_hospitals(nairobi_area)
@@ -262,25 +218,24 @@ with col_result:
             cause_of_accident   = cause_of_accident
         )
 
-        severity     = result['severity']
-        confidence   = result['confidence']
-        risk_factors = result['risk_factors']
-        weather_used = result['weather']
-        is_high      = severity == 'HIGH'
-
+        severity      = result['severity']
+        confidence    = result['confidence']
+        risk_factors  = result['risk_factors']
+        weather_used  = result['weather']
+        is_borderline = result['is_borderline']
+        is_high       = severity == 'HIGH'
 
         # ── SEVERITY RESULT PANEL ─────────────────────────────
-        # HIGH → ALS (Advanced Life Support): paramedics, trauma team, critical care protocol
-        # LOW  → BLS (Basic Life Support): standard ambulance
-        # The confidence score reflects the model's probability estimate.
-        # Threshold is set at 0.40 (optimised on the validation set using F2-score
-        # to prioritise recall — minimising under-triage risk).
+        # HIGH → ALS (Advanced Life Support)
+        # LOW  → BLS (Basic Life Support)
+        # Threshold: 0.40 (F2-optimised — maximises recall,
+        # minimises under-triage in emergency dispatch context)
 
         if is_high:
             st.markdown(f"""
 <div class="result-high">
     <p class="severity-text-high">🔴 HIGH SEVERITY</p>
-    <p class="action-text"> DISPATCH ADVANCED LIFE SUPPORT (ALS)</p>
+    <p class="action-text">DISPATCH ADVANCED LIFE SUPPORT (ALS)</p>
     <p class="confidence-text">Model confidence: {confidence}%</p>
     <div class="conf-track">
         <div class="conf-fill-high" style="width:{confidence}%"></div>
@@ -288,47 +243,47 @@ with col_result:
 </div>
 """, unsafe_allow_html=True)
         else:
+            severity_label = (
+                "⚠️ LOW SEVERITY — BORDERLINE"
+                if is_borderline else
+                "🟢 LOW SEVERITY"
+            )
             st.markdown(f"""
 <div class="result-low">
-    <p class="severity-text-low">🟢 LOW SEVERITY</p>
-    <p class="action-text"> DISPATCH BASIC LIFE SUPPORT (BLS)</p>
-    <p class="confidence-text"> Model confidence: {confidence}%</p>
+    <p class="severity-text-low">{severity_label}</p>
+    <p class="action-text">DISPATCH BASIC LIFE SUPPORT (BLS)</p>
+    <p class="confidence-text">Model confidence: {confidence}%</p>
     <div class="conf-track">
         <div class="conf-fill-low" style="width:{confidence}%"></div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-
         # ── HOSPITAL ALERT ────────────────────────────────────
-        # Nearest trauma centres are looked up from a static mapping table in hospitals.py,
-        # keyed by Nairobi area.
-        # Primary = closest major trauma facility.
-        # Secondary = backup if primary is unavailable.
-
         st.markdown(f"""
 <div class="hospital-box">
-    <strong> Alert Nearest Trauma Centre - {nairobi_area}</strong>
+    <strong>🏥 Alert Nearest Trauma Centre — {nairobi_area}</strong>
     <span>Primary: </span><b>{hospitals['primary']}</b><br>
     <span>Secondary: </span><b>{hospitals['secondary']}</b>
 </div>
 """, unsafe_allow_html=True)
 
-
         # ── CONTRIBUTING RISK FACTORS ─────────────────────────
-        # Risk factors are derived from the input combination and highlight why this incident
-        # was classified at this severity level. Useful for dispatcher awareness.
+        # Explains WHY the model produced this classification.
+        # HIGH: inputs that elevated severity probability.
+        # LOW:  inputs that kept probability below threshold.
+        # Contextual: auto-derived time and weather signals.
 
-        with st.expander("Contributing Risk Factors"):
+        with st.expander("📊 Contributing Risk Factors", expanded=True):
             for factor in risk_factors:
                 st.markdown(f"• {factor}")
             st.caption(
-                f"Environment: {weather_used} conditions at time of report"
+                f"Context: {weather_used} · "
+                f"{'Night-time' if temporal.get('Is_night') else 'Daytime'} · "
+                f"{'Rush hour' if temporal.get('Is_rush_hour') else 'Off-peak'}"
             )
 
-
         # ── UPDATE SESSION HISTORY ────────────────────────────
-        # Keeps the last 5 classifications for the dispatcher to review within the current session.
         st.session_state.history.insert(0, {
             'Time'      : now.strftime("%H:%M"),
             'Area'      : nairobi_area,
@@ -340,12 +295,9 @@ with col_result:
 
     else:
 
-        # ── AWAITING STATE ────────────────────────────────────
-        # Shown before any classification is made.
-
         st.markdown("""
 <div class="awaiting-box">
-    <div style="font-size:2.5rem;margin-bottom:1rem"> </div>
+    <div style="font-size:2.5rem;margin-bottom:1rem">🚨</div>
     <div style="font-weight:600;color:#94a3b8;font-size:1.1rem">
         Awaiting Incident Report
     </div>
@@ -353,15 +305,11 @@ with col_result:
 </div>
 """, unsafe_allow_html=True)
 
-
     # ── SESSION LOG ───────────────────────────────────────────
-    # Visible on the right side — whether or not a classification has been run in this session.
-
     st.markdown("<div style='margin: 2rem 0 0.5rem 0;'></div>",
                 unsafe_allow_html=True)
 
-    with st.expander(" View Recent Classifications Log",
-                     expanded=False):
+    with st.expander("🕐 View Recent Classifications Log", expanded=False):
         if st.session_state.history:
             st.table(pd.DataFrame(st.session_state.history))
         else:

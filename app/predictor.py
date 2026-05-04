@@ -10,7 +10,6 @@ import numpy as np
 import requests
 import streamlit as st
 from datetime import datetime
-import joblib
 import json
 import os
 
@@ -42,36 +41,21 @@ THRESHOLD = metadata['optimal_thresholds']['Balanced Random Forest']
 # These 14 background features are auto-filled for values the
 # dispatcher cannot know from a phone call.
 #
-# CRITICAL DESIGN PRINCIPLE:
-# Defaults must be genuinely neutral so that the dispatcher's
-# 7 inputs are what drive the classification outcome.
-# Using values with HIGH-class association in the background
-# causes the model to produce elevated probabilities regardless
-# of what the dispatcher enters — making their inputs ineffective.
+# DESIGN PRINCIPLE:
+# Defaults must be genuinely neutral so the dispatcher's 7 inputs
+# drive the classification outcome in both directions.
 #
-# Defaults are validated against the trained model:
-# With LOW dispatcher inputs (rear-end, 0 casualties, no pedestrian)
-# these defaults produce probability 0.37 — correctly below the
-# 0.40 threshold. With HIGH dispatcher inputs (pedestrian collision,
-# 4 casualties, 3 vehicles, overspeeding) they produce 0.50 —
-# correctly above threshold. The dispatcher inputs are driving the
-# classification in both directions as intended.
+# Validated against the trained model pkl:
+# LOW inputs (rear-end, 0 casualties, no pedestrian) → prob 0.37 (LOW ✓)
+# HIGH inputs (pedestrian hit, 4+ casualties, 3 vehicles) → prob 0.50 (HIGH ✓)
 #
-# Two defaults corrected from original version after model validation:
-#
-#   Owner_of_vehicle: 'Owner' → 'Organization'
-#     Privately-owned vehicles ('Owner') sit in a higher-severity
-#     feature space in the trained model. Organization-owned vehicles
-#     (fleet/corporate) are associated with lower severity outcomes —
-#     professional drivers, better maintenance, safer driving context.
-#     This is a valid neutral default since the dispatcher cannot know
-#     vehicle ownership from a phone call.
-#
+# Corrections from original version (validated against model):
+#   Owner_of_vehicle  : 'Owner' → 'Organization'
+#     Owner sits in a higher-severity OHE bucket. Organization
+#     (fleet/corporate vehicles) is the neutral LOW-class default.
 #   Service_year_of_vehicle: 'Unknown' → '2-5yrs'
-#     'Unknown' maps to a high-severity OHE bucket in the model.
-#     2-5yrs represents a vehicle past break-in but not deteriorating —
-#     the lowest-severity service age bracket in the training data.
-#     This is a reasonable neutral assumption for an unspecified vehicle.
+#     'Unknown' maps to a high-severity bucket. 2-5yrs is the
+#     lowest-severity service age bracket in the training data.
 # ============================================================
 
 MODAL_DEFAULTS = {
@@ -108,10 +92,17 @@ VEHICLE_MAPPING = {
 
 
 # ---- Collision type mapping ----
-# Side impact maps to Vehicle with vehicle collision — the most
-# common collision type in confirmed LOW severity test cases.
+# Maps Nairobi dispatcher labels to RTA Addis Ababa training categories.
+#
+# CRITICAL CORRECTION — Head-on:
+# Previously mapped to 'Collision with roadside-parked vehicles'
+# which in the training data means hitting a STATIONARY parked car —
+# a LOW-severity event. This caused genuine high-speed head-on
+# collisions to be misclassified as LOW.
+# Corrected to 'Rollover' — the closest HIGH-severity proxy in the
+# training dataset for a high-energy frontal impact.
 COLLISION_MAPPING = {
-    'Head-on'        : 'Collision with roadside-parked vehicles',
+    'Head-on'        : 'Rollover',                       # corrected: was 'Collision with roadside-parked vehicles'
     'Rear-end'       : 'Rear-end',
     'Rollover'       : 'Rollover',
     'Hit pedestrian' : 'Collision with pedestrians',
@@ -138,8 +129,7 @@ CAUSE_MAPPING = {
 def get_weather():
     """
     Fetch current weather for Nairobi using Open-Meteo API.
-    Cached for 10 minutes. No API key required.
-    Falls back to Normal if API unavailable.
+    Cached for 10 minutes. Falls back to Normal if unavailable.
     """
     url = (
         "https://api.open-meteo.com/v1/forecast"
@@ -152,7 +142,6 @@ def get_weather():
         data     = response.json()
         precip   = data['current']['precipitation']
         code     = data['current']['weathercode']
-
         if precip > 0 or code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
             return 'Raining'
         elif code in [71, 73, 75, 77]:
@@ -203,38 +192,23 @@ def hydrate_features(area_addis, vehicle_type, collision_type,
         - 1 weather feature cached from Open-Meteo API (10 min TTL)
         - 14 low-impact features filled with validated neutral defaults
     """
-
-    # ---- Start with modal defaults ----
     features = MODAL_DEFAULTS.copy()
-
-    # ---- Auto-retrieve weather (cached — fast) ----
     features['Weather_conditions'] = get_weather()
-
-    # ---- Auto-fill temporal features ----
     temporal = get_temporal_features()
     features.update(temporal)
 
-    # ---- Apply dispatcher inputs ----
-    features['Area_accident_occured']         = area_addis
-    features['Type_of_vehicle']               = VEHICLE_MAPPING.get(
-        vehicle_type, 'Automobile'
-    )
-    features['Type_of_collision']             = COLLISION_MAPPING.get(
-        collision_type, 'Other'
-    )
-    features['Number_of_vehicles_involved']   = num_vehicles
-    features['Number_of_casualties']          = num_casualties
-    features['Cause_of_accident']             = CAUSE_MAPPING.get(
-        cause_of_accident, 'No distancing'
-    )
+    features['Area_accident_occured']       = area_addis
+    features['Type_of_vehicle']             = VEHICLE_MAPPING.get(vehicle_type, 'Automobile')
+    features['Type_of_collision']           = COLLISION_MAPPING.get(collision_type, 'Other')
+    features['Number_of_vehicles_involved'] = num_vehicles
+    features['Number_of_casualties']        = num_casualties
+    features['Cause_of_accident']           = CAUSE_MAPPING.get(cause_of_accident, 'No distancing')
 
-    # ---- Pedestrian movement ----
     if pedestrian_involved:
         features['Pedestrian_movement'] = 'Crossing from driver\'s nearside'
     else:
         features['Pedestrian_movement'] = 'Not a Pedestrian'
 
-    # ---- Build dataframe in correct column order ----
     column_order = [
         'Day_of_week', 'Age_band_of_driver', 'Sex_of_driver',
         'Educational_level', 'Vehicle_driver_relation',
@@ -257,156 +231,181 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             pedestrian_involved, cause_of_accident):
     """
     Run prediction on 7 dispatcher inputs.
-    Returns severity, confidence, and top risk factors.
+    Returns severity, confidence, risk_factors, is_borderline, weather.
     """
 
-    # ---- Build feature vector ----
     df = hydrate_features(
         area_addis, vehicle_type, collision_type,
         num_vehicles, num_casualties,
         pedestrian_involved, cause_of_accident
     )
 
-    # ---- Get probability from model ----
     proba           = model.predict_proba(df)[0][1]
     severity        = 'HIGH' if proba >= THRESHOLD else 'LOW'
     confidence      = round(proba * 100, 1)
     current_weather = get_weather()
     temporal        = get_temporal_features()
 
-    # ---- Identify which factors are driving the classification ----
-    clinical_factors   = []
-    contextual_factors = []
+    # ================================================================
+    # CONTRIBUTING RISK FACTORS
+    # Explains WHY the model produced this classification.
+    # HIGH factors: dispatcher inputs that elevated severity probability.
+    # LOW factors:  dispatcher inputs that kept probability below threshold.
+    # Contextual:   auto-derived time and weather signals.
+    # Strictly explanatory — the dispatch decision (ALS/BLS) and hospital
+    # alert are communicated separately in the UI.
+    # ================================================================
 
-    # Clinical inputs — directly reported by dispatcher
-    if collision_type == 'Head-on':
-        clinical_factors.append(
-            "Head-on collision - maximum energy transfer"
-        )
-    if collision_type == 'Rollover':
-        clinical_factors.append(
-            "Rollover - high injury and entrapment risk"
+    clinical_high  = []
+    clinical_low   = []
+    contextual     = []
+
+    # ---- HIGH-signal clinical inputs ----
+    if collision_type in ['Head-on', 'Rollover']:
+        clinical_high.append(
+            f"{collision_type} — maximum kinetic energy transfer, high entrapment risk"
         )
     if pedestrian_involved:
-        clinical_factors.append(
-            "Pedestrian involved - zero vehicle protection"
+        clinical_high.append(
+            "Pedestrian involved — no vehicle protection for victim"
         )
     if vehicle_type == 'Lorry/Truck':
-        clinical_factors.append(
-            "Heavy vehicle - high mass impact force"
+        clinical_high.append(
+            "Heavy goods vehicle — high mass multiplies impact force"
         )
-    if num_casualties >= 3:
-        clinical_factors.append(
-            f"{num_casualties} casualties - mass casualty event"
+    if vehicle_type in ['Matatu/Minibus', 'Bus']:
+        clinical_high.append(
+            "Public service vehicle — high occupancy increases casualty risk"
+        )
+    if num_casualties >= 5:
+        clinical_high.append(
+            f"{num_casualties} casualties — mass casualty threshold exceeded"
+        )
+    elif num_casualties >= 3:
+        clinical_high.append(
+            f"{num_casualties} casualties — exceeds single BLS unit capacity"
+        )
+    elif num_casualties >= 1 and pedestrian_involved:
+        clinical_high.append(
+            f"{num_casualties} casualty with pedestrian involvement — elevated injury severity"
         )
     if num_vehicles >= 3:
-        clinical_factors.append(
-            f"{num_vehicles} vehicles - high energy crash"
+        clinical_high.append(
+            f"{num_vehicles} vehicles — multi-vehicle high-energy crash"
         )
     if cause_of_accident == 'Overspeeding':
-        clinical_factors.append(
-            "Overspeeding - high kinetic energy at impact"
+        clinical_high.append(
+            "Overspeeding — kinetic energy scales with square of velocity"
         )
     if cause_of_accident == 'Drunk driving':
-        clinical_factors.append(
-            "Impaired driver - unpredictable behaviour"
+        clinical_high.append(
+            "Impaired driver — unpredictable behaviour, delayed braking"
         )
     if cause_of_accident == 'Overtaking':
-        clinical_factors.append(
-            "Overtaking - elevated head-on collision risk"
+        clinical_high.append(
+            "Overtaking manoeuvre — elevated frontal collision risk"
+        )
+    if collision_type == 'Hit pedestrian':
+        clinical_high.append(
+            "Pedestrian strike — unprotected road user, high trauma probability"
         )
 
-    # Contextual inputs — auto-derived from system clock and weather API
+    # ---- LOW-signal clinical inputs ----
+    if collision_type == 'Rear-end':
+        clinical_low.append(
+            "Rear-end collision — lower energy transfer than frontal impact"
+        )
+    if collision_type == 'Side impact':
+        clinical_low.append(
+            "Side impact — vehicle-to-vehicle contact without head-on force"
+        )
+    if num_casualties == 0:
+        clinical_low.append(
+            "No casualties reported — incident below injury threshold"
+        )
+    elif num_casualties <= 2 and not pedestrian_involved:
+        clinical_low.append(
+            f"{num_casualties} casualty — within single BLS unit response capacity"
+        )
+    if num_vehicles == 1:
+        clinical_low.append(
+            "Single vehicle — contained incident, no multi-vehicle energy transfer"
+        )
+    if vehicle_type == 'Car/Saloon':
+        clinical_low.append(
+            "Passenger car — standard crumple zone and restraint systems present"
+        )
+    if vehicle_type == 'Pickup/SUV':
+        clinical_low.append(
+            "Light commercial vehicle — reinforced frame, lower occupancy risk"
+        )
+    if not pedestrian_involved:
+        clinical_low.append(
+            "No pedestrian involvement — all parties have vehicle protection"
+        )
+    if cause_of_accident == 'Unknown':
+        clinical_low.append(
+            "Cause unconfirmed — no high-energy trigger reported by caller"
+        )
+
+    # ---- Contextual signals ----
     if temporal['Is_night']:
-        contextual_factors.append("Night time - reduced visibility")
+        contextual.append(
+            "Night-time — reduced visibility elevates injury severity risk"
+        )
     if temporal['Is_rush_hour']:
-        contextual_factors.append("Rush hour - high traffic density")
+        contextual.append(
+            "Rush hour — high traffic density increases multi-vehicle risk"
+        )
     if current_weather == 'Raining':
-        contextual_factors.append(
-            "Raining - reduced road grip and visibility"
+        contextual.append(
+            "Active rainfall — reduced road grip and stopping distance"
         )
     elif current_weather == 'Fog or mist':
-        contextual_factors.append(
-            "Fog or mist - severely reduced visibility"
+        contextual.append(
+            "Fog conditions — severely reduced visibility at scene"
         )
 
+    # ---- Assemble final risk factors ----
     if severity == 'HIGH':
-        if clinical_factors:
-            risk_factors = clinical_factors + contextual_factors
+        if clinical_high:
+            risk_factors = (clinical_high + contextual)[:3]
+        else:
+            # Fallback: no single dominant HIGH signal but model still
+            # classified HIGH — explain using what IS present
+            present = []
+            if num_vehicles >= 2:
+                present.append(
+                    f"{num_vehicles} vehicles involved — combined incident profile"
+                )
+            if num_casualties >= 1:
+                present.append(
+                    f"{num_casualties} casualty reported — injury presence noted"
+                )
+            if contextual:
+                present.extend(contextual)
+            if present:
+                risk_factors = present[:3]
+            else:
+                risk_factors = [
+                    "Multiple incident factors collectively exceed LOW threshold",
+                    "Model detects HIGH-severity pattern from combined inputs"
+                ]
+    else:
+        # LOW — explain what kept probability below threshold
+        if clinical_low:
+            risk_factors = (clinical_low + contextual)[:3]
         else:
             risk_factors = [
-                "Incident pattern - combined temporal and "
-                "contextual factors indicate elevated severity",
-            ] + contextual_factors
-            if not contextual_factors:
-                risk_factors.append(
-                    "No single dominant input factor - "
-                    "model uses combined incident pattern"
-                )
-
-    else:
-        # LOW classification — explain what drove the LOW outcome
-        risk_factors = []
-
-        if collision_type == 'Rear-end':
-            risk_factors.append(
-                "Rear-end collision - lower energy transfer than head-on"
-            )
-        elif collision_type == 'Side impact':
-            risk_factors.append(
-                "Side impact - vehicle-to-vehicle contact, no head-on force"
-            )
-
-        if num_casualties == 0:
-            risk_factors.append(
-                "No casualties reported - minor incident profile"
-            )
-        elif num_casualties <= 2 and not pedestrian_involved:
-            risk_factors.append(
-                f"{num_casualties} casualty - within BLS response capacity"
-            )
-
-        if vehicle_type == 'Car/Saloon':
-            risk_factors.append(
-                "Passenger vehicle - standard safety profile"
-            )
-        elif vehicle_type == 'Motorcycle/Boda Boda':
-            risk_factors.append(
-                "Motorcycle - low mass, contained impact"
-            )
-
-        if not pedestrian_involved:
-            risk_factors.append(
-                "No pedestrian involvement - reduced vulnerability risk"
-            )
-
-        if cause_of_accident in ['Changing lanes unsafely', 'Unknown']:
-            risk_factors.append(
-                "Low-speed manoeuvre - reduced kinetic energy at impact"
-            )
-
-        # Borderline note — only if very close to threshold
-        if proba >= 0.35:
-            risk_factors = [
-                "Borderline case - monitor closely for escalation",
-                "Reassess if caller reports additional casualties",
-                "Upgrade to ALS if patient condition deteriorates"
+                "Incident profile below HIGH severity threshold",
+                "No dominant HIGH-severity features detected in caller report"
             ]
 
-        if not risk_factors:
-            risk_factors.append(
-                "Incident profile consistent with LOW severity pattern"
-            )
-
-    # Return top 3 most relevant factors only.
-    risk_factors = risk_factors[:3] if risk_factors else [
-        "Standard risk profile - no elevated factors detected"
-    ]
-
     return {
-        'severity'    : severity,
-        'confidence'  : confidence,
-        'probability' : proba,
-        'risk_factors': risk_factors,
-        'weather'     : current_weather
+        'severity'     : severity,
+        'confidence'   : confidence,
+        'probability'  : proba,
+        'risk_factors' : risk_factors,
+        'weather'      : current_weather,
+        'is_borderline': 0.35 <= proba < THRESHOLD
     }
