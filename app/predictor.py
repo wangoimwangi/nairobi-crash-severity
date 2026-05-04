@@ -104,8 +104,6 @@ VEHICLE_MAPPING = {
 
 
 # ---- Collision type mapping ----
-# Head-on corrected from 'Collision with roadside-parked vehicles'
-# (LOW in training data) to 'Rollover' — HIGH-severity proxy.
 COLLISION_MAPPING = {
     'Head-on'        : 'Rollover',
     'Rear-end'       : 'Rear-end',
@@ -128,6 +126,38 @@ CAUSE_MAPPING = {
     'Mechanical failure'         : 'Defect of vehicle',
     'Other'                      : 'Other'
 }
+
+
+def _clinical_override(collision_type, vehicle_type, num_vehicles,
+                        num_casualties, cause_of_accident):
+    """
+    Clinical override rule - applied on top of the ML model score.
+
+    When multiple extreme HIGH-severity signals are simultaneously
+    present, the combination is unambiguously HIGH regardless of
+    the model's probability score. This mirrors real-world clinical
+    triage practice where hard override criteria exist alongside
+    scoring models (e.g. Manchester Triage System, SALT triage).
+
+    Override fires when ALL of the following are true:
+      - High-energy collision: Rollover or Head-on
+      - Heavy or high-occupancy vehicle: Lorry or Bus/Matatu
+      - Mass casualty threshold: 3+ casualties
+      - Multi-vehicle: 3+ vehicles involved
+
+    This combination represents a mass casualty, high-energy,
+    heavy-vehicle incident - ALS dispatch is mandatory in any
+    real emergency protocol regardless of scoring model output.
+
+    The model probability and threshold are NOT changed.
+    This rule only affects the severity label and factors display.
+    """
+    is_high_energy   = collision_type in {'Rollover', 'Head-on'}
+    is_heavy_vehicle = vehicle_type in {'Lorry/Truck', 'Matatu/Minibus', 'Bus'}
+    is_mass_casualty = num_casualties >= 3
+    is_multi_vehicle = num_vehicles >= 3
+
+    return is_high_energy and is_heavy_vehicle and is_mass_casualty and is_multi_vehicle
 
 
 @st.cache_data(ttl=300)
@@ -238,6 +268,15 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             pedestrian_involved, cause_of_accident):
     """
     Run prediction on 7 dispatcher inputs.
+
+    Classification pipeline:
+    1. ML model produces probability score
+    2. Clinical override checked — if extreme multi-signal HIGH
+       combination present, severity is forced to HIGH regardless
+       of model probability (rule-based safety net)
+    3. Risk factors assembled to match and explain the final
+       severity classification
+
     Returns severity, confidence, risk_factors, is_borderline, weather.
     """
 
@@ -248,29 +287,24 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     )
 
     proba           = model.predict_proba(df)[0][1]
-    severity        = 'HIGH' if proba >= THRESHOLD else 'LOW'
-    confidence      = round(proba * 100, 1)
     current_weather = get_weather(nairobi_area)
     temporal        = get_temporal_features()
 
-    # ================================================================
-    # CONTRIBUTING RISK FACTORS
-    # HIGH factors: inputs that elevated severity probability.
-    # LOW factors:  inputs that kept probability below threshold.
-    # Contextual:   Nairobi local time and weather signals.
-    #
-    # Rule: factors must always match and support the classification.
-    # HIGH result → only show HIGH factors.
-    # LOW result  → only show LOW factors.
-    # For borderline HIGH (0.40-0.55): show top HIGH signal + top
-    # mitigating LOW factor for dispatcher situational awareness.
-    # ================================================================
+    # ---- Apply clinical override ----
+    override = _clinical_override(
+        collision_type, vehicle_type,
+        num_vehicles, num_casualties, cause_of_accident
+    )
 
-    clinical_high  = []
-    clinical_low   = []
-    contextual     = []
+    severity   = 'HIGH' if (proba >= THRESHOLD or override) else 'LOW'
+    confidence = round(proba * 100, 1)
 
-    # ---- HIGH-signal clinical inputs ----
+    # ---- Build clinical factor lists ----
+    clinical_high = []
+    clinical_low  = []
+    contextual    = []
+
+    # HIGH-signal clinical inputs
     if collision_type in HIGH_SEVERITY_COLLISIONS:
         clinical_high.append(
             f"{collision_type} — maximum kinetic energy transfer, high entrapment risk"
@@ -316,7 +350,7 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "Overtaking manoeuvre — elevated frontal collision risk"
         )
 
-    # ---- LOW-signal clinical inputs ----
+    # LOW-signal clinical inputs
     if collision_type == 'Rear-end':
         clinical_low.append(
             "Rear-end collision — lower energy transfer than frontal impact"
@@ -350,7 +384,7 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "No pedestrian involvement — all parties have vehicle protection"
         )
 
-    # ---- Contextual signals ----
+    # Contextual signals
     if temporal['Is_night']:
         contextual.append(
             "Night-time — reduced visibility elevates injury severity risk"
@@ -368,10 +402,14 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     is_borderline_high = THRESHOLD <= proba < 0.55
 
     if severity == 'HIGH':
-        if clinical_high:
+        if override and proba < THRESHOLD:
+            # Clinical override fired — show all HIGH signals clearly
+            # so dispatcher understands why ALS is being dispatched
+            risk_factors = (clinical_high + contextual)[:3]
+        elif clinical_high:
             if is_borderline_high and clinical_low:
                 # Borderline HIGH: show dominant HIGH signal + top
-                # mitigating LOW factor for dispatcher awareness
+                # mitigating LOW factor for situational awareness
                 risk_factors = (clinical_high[:2] + clinical_low[:1] + contextual)[:3]
             else:
                 risk_factors = (clinical_high + contextual)[:3]
@@ -388,12 +426,12 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             ]
     else:
         # LOW — only show LOW factors, never HIGH signals
-        # The classification is LOW so only LOW-supporting evidence shown
         if clinical_low:
             risk_factors = (clinical_low + contextual)[:3]
         else:
             risk_factors = [
-                "Incident profile below HIGH severity threshold"
+                "No pedestrian involvement - primary LOW-severity indicator",
+                "Incident probability below dispatch threshold"
             ]
 
     # Weather display label
@@ -410,5 +448,5 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         'probability'  : proba,
         'risk_factors' : risk_factors,
         'weather'      : weather_display,
-        'is_borderline': 0.35 <= proba < THRESHOLD
+        'is_borderline': 0.35 <= proba < THRESHOLD and not override
     }
