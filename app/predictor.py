@@ -115,9 +115,7 @@ COLLISION_MAPPING = {
     'Other'          : 'Other'
 }
 
-# ---- High-severity collision types (UI labels) ----
-# Used for risk factor logic — matches dispatcher UI labels directly,
-# not the mapped training dataset values.
+# High-severity collision UI labels
 HIGH_SEVERITY_COLLISIONS = {'Head-on', 'Rollover', 'Hit pedestrian'}
 
 # ---- Cause of accident mapping ----
@@ -137,13 +135,9 @@ CAUSE_MAPPING = {
 def get_weather(nairobi_area: str = "Other/Unknown") -> str:
     """
     Fetch live weather for the specific Nairobi area using Open-Meteo API.
-    Uses per-area GPS coordinates so weather reflects the actual microclimate
-    at the incident location. Cached 5 minutes per area (reduced from 10 to
-    capture fast-changing Nairobi weather more accurately).
-    Falls back to Normal if API unavailable.
-
-    Rain is only reported when BOTH precipitation > 0 AND a precipitation
-    weathercode is active — avoids false positives from stale API state.
+    Requires BOTH precipitation > 0 AND a rain weathercode to report Rain,
+    preventing false positives from stale API state.
+    Cached 5 minutes per area. Falls back to Normal if unavailable.
     """
     lat, lon = AREA_COORDINATES.get(nairobi_area, (-1.2921, 36.8219))
     url = (
@@ -158,12 +152,10 @@ def get_weather(nairobi_area: str = "Other/Unknown") -> str:
         precip   = data['current']['precipitation']
         code     = data['current']['weathercode']
 
-        rain_codes = {51, 53, 55, 61, 63, 65, 80, 81, 82}
-        fog_codes  = {45, 48}
+        rain_codes  = {51, 53, 55, 61, 63, 65, 80, 81, 82}
+        fog_codes   = {45, 48}
         cloud_codes = {71, 73, 75, 77, 3}
 
-        # Require BOTH precipitation > 0 AND a rain code to report Rain
-        # This prevents false positives when code and precip disagree
         if precip > 0 and code in rain_codes:
             return 'Raining'
         elif code in fog_codes:
@@ -208,9 +200,7 @@ def get_temporal_features() -> dict:
 def hydrate_features(area_addis, nairobi_area, vehicle_type, collision_type,
                      num_vehicles, num_casualties,
                      pedestrian_involved, cause_of_accident):
-    """
-    Build complete 28-feature vector from 7 dispatcher inputs.
-    """
+    """Build complete 28-feature vector from 7 dispatcher inputs."""
     features = MODAL_DEFAULTS.copy()
     features['Weather_conditions'] = get_weather(nairobi_area)
     temporal = get_temporal_features()
@@ -265,22 +255,31 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     current_weather = get_weather(nairobi_area)
     temporal        = get_temporal_features()
 
+    # ================================================================
+    # CONTRIBUTING RISK FACTORS
+    #
+    # HIGH factors: inputs that elevated severity probability
+    # LOW factors:  inputs that kept or pulled probability toward LOW
+    # Contextual:   auto-derived time and weather signals
+    #
+    # For borderline HIGH (prob 0.40–0.55): show BOTH the HIGH-signal
+    # that drove the classification AND the mitigating LOW signals
+    # present. This gives the dispatcher full situational awareness
+    # and makes the model's reasoning transparent and explainable.
+    # ================================================================
+
     clinical_high  = []
     clinical_low   = []
     contextual     = []
 
     # ---- HIGH-signal clinical inputs ----
-    # NOTE: checks use dispatcher UI labels (collision_type, vehicle_type etc.)
-    # not the mapped training dataset values — these are the original strings
-    # the dispatcher selected, preserved through the predict() call.
-
     if collision_type in HIGH_SEVERITY_COLLISIONS:
         clinical_high.append(
             f"{collision_type} — maximum kinetic energy transfer, high entrapment risk"
         )
     if pedestrian_involved:
         clinical_high.append(
-            "Pedestrian involved — no vehicle protection for victim"
+            "Pedestrian involved — unprotected road user, high trauma probability"
         )
     if vehicle_type == 'Lorry/Truck':
         clinical_high.append(
@@ -319,7 +318,7 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "Overtaking manoeuvre — elevated frontal collision risk"
         )
 
-    # ---- LOW-signal clinical inputs ----
+    # ---- LOW-signal clinical inputs (mitigating factors) ----
     if collision_type == 'Rear-end':
         clinical_low.append(
             "Rear-end collision — lower energy transfer than frontal impact"
@@ -344,14 +343,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         clinical_low.append(
             "Passenger car — standard crumple zone and restraint systems present"
         )
-    if vehicle_type == 'Pickup/SUV':
-        clinical_low.append(
-            "Light commercial vehicle — reinforced frame, lower occupancy risk"
-        )
-    if not pedestrian_involved:
-        clinical_low.append(
-            "No pedestrian involvement — all parties have vehicle protection"
-        )
     if cause_of_accident == 'Unknown':
         clinical_low.append(
             "Cause unconfirmed — no high-energy trigger reported by caller"
@@ -368,18 +359,26 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         )
     if current_weather == 'Raining':
         contextual.append(
-            "Rain at incident location — reduced road grip and stopping distance"
+            "Rain — reduced road grip and stopping distance"
         )
     elif current_weather == 'Fog or mist':
         contextual.append(
-            "Fog at incident location — severely reduced visibility at scene"
+            "Fog — severely reduced visibility at scene"
         )
 
     # ---- Assemble final risk factors ----
+    is_borderline_high = THRESHOLD <= proba < 0.55  # borderline HIGH band
+
     if severity == 'HIGH':
         if clinical_high:
-            risk_factors = (clinical_high + contextual)[:3]
+            if is_borderline_high and clinical_low:
+                # Borderline HIGH: show dominant HIGH signal + top mitigating
+                # LOW factor so dispatcher understands the full picture
+                risk_factors = (clinical_high[:2] + clinical_low[:1] + contextual)[:3]
+            else:
+                risk_factors = (clinical_high + contextual)[:3]
         else:
+            # No explicit HIGH signal found — explain via combined factors
             present = []
             if num_vehicles >= 2:
                 present.append(f"{num_vehicles} vehicles involved — combined incident profile")
@@ -388,10 +387,11 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             if contextual:
                 present.extend(contextual)
             risk_factors = present[:3] if present else [
-                "Multiple incident factors collectively exceed LOW threshold",
+                "Multiple incident factors collectively exceed severity threshold",
                 "Model detects HIGH-severity pattern from combined inputs"
             ]
     else:
+        # LOW — show what kept probability below threshold
         if clinical_low:
             risk_factors = (clinical_low + contextual)[:3]
         else:
@@ -400,7 +400,7 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
                 "No dominant HIGH-severity features detected in caller report"
             ]
 
-    # ---- Weather display label (clean, no "Raining" — use "Rain") ----
+    # Weather display label
     weather_display = {
         'Raining'    : 'Rain',
         'Cloudy'     : 'Cloudy',
@@ -414,5 +414,5 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         'probability'  : proba,
         'risk_factors' : risk_factors,
         'weather'      : weather_display,
-        'is_borderline': 0.35 <= proba < THRESHOLD
+        'is_borderline': 0.35 <= probability < THRESHOLD
     }
