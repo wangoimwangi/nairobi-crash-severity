@@ -104,8 +104,6 @@ VEHICLE_MAPPING = {
 
 
 # ---- Collision type mapping ----
-# Head-on corrected from 'Collision with roadside-parked vehicles'
-# (LOW in training data) to 'Rollover' — HIGH-severity proxy.
 COLLISION_MAPPING = {
     'Head-on'        : 'Rollover',
     'Rear-end'       : 'Rear-end',
@@ -115,7 +113,6 @@ COLLISION_MAPPING = {
     'Other'          : 'Other'
 }
 
-# High-severity collision UI labels
 HIGH_SEVERITY_COLLISIONS = {'Head-on', 'Rollover', 'Hit pedestrian'}
 
 # ---- Cause of accident mapping ----
@@ -135,8 +132,7 @@ CAUSE_MAPPING = {
 def get_weather(nairobi_area: str = "Other/Unknown") -> str:
     """
     Fetch live weather for the specific Nairobi area using Open-Meteo API.
-    Requires BOTH precipitation > 0 AND a rain weathercode to report Rain,
-    preventing false positives from stale API state.
+    Requires BOTH precipitation > 0 AND a rain weathercode to report Rain.
     Cached 5 minutes per area. Falls back to Normal if unavailable.
     """
     lat, lon = AREA_COORDINATES.get(nairobi_area, (-1.2921, 36.8219))
@@ -171,7 +167,7 @@ def get_weather(nairobi_area: str = "Other/Unknown") -> str:
 def get_temporal_features() -> dict:
     """
     Auto-derive temporal features from Nairobi local clock (EAT = UTC+3).
-    No caching — always reads the current time fresh on every call.
+    No caching — always reads current time fresh.
     """
     now          = datetime.now(NAIROBI_TZ)
     hour         = now.hour
@@ -255,19 +251,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     current_weather = get_weather(nairobi_area)
     temporal        = get_temporal_features()
 
-    # ================================================================
-    # CONTRIBUTING RISK FACTORS
-    #
-    # HIGH factors: inputs that elevated severity probability
-    # LOW factors:  inputs that kept or pulled probability toward LOW
-    # Contextual:   auto-derived time and weather signals
-    #
-    # For borderline HIGH (prob 0.40–0.55): show BOTH the HIGH-signal
-    # that drove the classification AND the mitigating LOW signals
-    # present. This gives the dispatcher full situational awareness
-    # and makes the model's reasoning transparent and explainable.
-    # ================================================================
-
     clinical_high  = []
     clinical_low   = []
     contextual     = []
@@ -318,7 +301,7 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "Overtaking manoeuvre — elevated frontal collision risk"
         )
 
-    # ---- LOW-signal clinical inputs (mitigating factors) ----
+    # ---- LOW-signal clinical inputs ----
     if collision_type == 'Rear-end':
         clinical_low.append(
             "Rear-end collision — lower energy transfer than frontal impact"
@@ -358,27 +341,22 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "Rush hour — high traffic density increases multi-vehicle risk"
         )
     if current_weather == 'Raining':
-        contextual.append(
-            "Rain — reduced road grip and stopping distance"
-        )
+        contextual.append("Rain — reduced road grip and stopping distance")
     elif current_weather == 'Fog or mist':
-        contextual.append(
-            "Fog — severely reduced visibility at scene"
-        )
+        contextual.append("Fog — severely reduced visibility at scene")
 
     # ---- Assemble final risk factors ----
-    is_borderline_high = THRESHOLD <= proba < 0.55  # borderline HIGH band
+    is_borderline_high = THRESHOLD <= proba < 0.55
 
     if severity == 'HIGH':
         if clinical_high:
             if is_borderline_high and clinical_low:
-                # Borderline HIGH: show dominant HIGH signal + top mitigating
-                # LOW factor so dispatcher understands the full picture
+                # Borderline HIGH: show dominant HIGH signal + mitigating LOW
+                # factor so dispatcher has full situational awareness
                 risk_factors = (clinical_high[:2] + clinical_low[:1] + contextual)[:3]
             else:
                 risk_factors = (clinical_high + contextual)[:3]
         else:
-            # No explicit HIGH signal found — explain via combined factors
             present = []
             if num_vehicles >= 2:
                 present.append(f"{num_vehicles} vehicles involved — combined incident profile")
@@ -391,13 +369,20 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
                 "Model detects HIGH-severity pattern from combined inputs"
             ]
     else:
-        # LOW — show what kept probability below threshold
+        # LOW classification
         if clinical_low:
             risk_factors = (clinical_low + contextual)[:3]
+        elif clinical_high:
+            # Serious inputs present but model still classified LOW —
+            # this is the model's conservative F2-threshold behaviour.
+            # Show the serious signals that were present so the dispatcher
+            # is aware, with a note that probability did not reach threshold.
+            risk_factors = [
+                f"Classified LOW at {confidence}% — below the 40% dispatch threshold",
+            ] + clinical_high[:2]
         else:
             risk_factors = [
-                "Incident profile below HIGH severity threshold",
-                "No dominant HIGH-severity features detected in caller report"
+                "Minor incident profile — no high-severity features detected"
             ]
 
     # Weather display label
