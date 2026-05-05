@@ -41,7 +41,8 @@ THRESHOLD = metadata['optimal_thresholds']['Balanced Random Forest']
 NAIROBI_TZ = timezone('Africa/Nairobi')
 
 
-# ---- Per-area coordinates for location-specific weather ----
+# ---- Per-area coordinates for location-specific weather display ----
+# Used for the info bar display only — not passed to the model.
 AREA_COORDINATES = {
     "CBD"                                : (-1.2833, 36.8167),
     "Upper Hill"                         : (-1.2978, 36.8178),
@@ -156,8 +157,10 @@ def _clinical_override(collision_type, vehicle_type, num_vehicles,
 @st.cache_data(ttl=300)
 def get_weather(nairobi_area: str = "Other/Unknown") -> str:
     """
-    Fetch live weather for the specific Nairobi area using Open-Meteo API.
-    Requires BOTH precipitation > 0 AND a rain weathercode to report Rain.
+    Fetch live weather for display in the info bar only.
+    Weather is NOT passed to the model — the model always uses
+    'Normal' as the weather feature to ensure classification
+    stability regardless of API reliability.
     Cached 5 minutes per area. Falls back to Normal if unavailable.
     """
     lat, lon = AREA_COORDINATES.get(nairobi_area, (-1.2921, 36.8219))
@@ -221,9 +224,19 @@ def get_temporal_features() -> dict:
 def hydrate_features(area_addis, nairobi_area, vehicle_type, collision_type,
                      num_vehicles, num_casualties,
                      pedestrian_involved, cause_of_accident):
-    """Build complete 28-feature vector from 7 dispatcher inputs."""
+    """
+    Build complete 28-feature vector from 7 dispatcher inputs.
+
+    Weather is always set to 'Normal' in the model input regardless
+    of actual weather conditions. Live weather is displayed in the
+    UI info bar but does not affect classification — this ensures
+    stable, consistent results independent of API reliability.
+    """
     features = MODAL_DEFAULTS.copy()
-    features['Weather_conditions'] = get_weather(nairobi_area)
+
+    # Weather kept as 'Normal' for model input — display only in UI
+    features['Weather_conditions'] = 'Normal'
+
     temporal = get_temporal_features()
     features.update(temporal)
 
@@ -261,15 +274,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             pedestrian_involved, cause_of_accident):
     """
     Run prediction on 7 dispatcher inputs.
-
-    Classification pipeline:
-    1. ML model produces probability score
-    2. Clinical override checked — if extreme multi-signal HIGH
-       combination present, severity forced to HIGH regardless
-       of model probability (rule-based safety net)
-    3. Risk factors assembled to match and explain the final
-       severity classification — always consistent with result
-
     Returns severity, confidence, risk_factors, is_borderline, weather.
     """
 
@@ -381,7 +385,8 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "No pedestrian involvement — all parties have vehicle protection"
         )
 
-    # Contextual signals
+    # Contextual signals — time only, not weather
+    # Weather is displayed in the UI but not used in classification
     if temporal['Is_night']:
         contextual.append(
             "Night-time — reduced visibility elevates injury severity risk"
@@ -390,10 +395,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         contextual.append(
             "Rush hour — high traffic density increases multi-vehicle risk"
         )
-    if current_weather == 'Raining':
-        contextual.append("Rain — reduced road grip and stopping distance")
-    elif current_weather == 'Fog or mist':
-        contextual.append("Fog — severely reduced visibility at scene")
 
     # ---- Assemble final risk factors ----
     is_borderline_high = THRESHOLD <= proba < 0.55
@@ -401,13 +402,10 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     if severity == 'HIGH':
         if clinical_high:
             if is_borderline_high and clinical_low and not override:
-                # Borderline HIGH: show dominant HIGH signal + top
-                # mitigating LOW factor for dispatcher awareness
                 risk_factors = (clinical_high[:2] + clinical_low[:1] + contextual)[:3]
             else:
                 risk_factors = (clinical_high + contextual)[:3]
         else:
-            # No single dominant HIGH signal — build from what IS present
             present = []
             if cause_of_accident not in ['Unknown']:
                 present.append(
@@ -422,16 +420,15 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
                 "Combined incident pattern exceeds LOW severity threshold"
             ]
     else:
-        # LOW — only show LOW factors, never HIGH signals
         if clinical_low:
             risk_factors = (clinical_low + contextual)[:3]
         else:
             risk_factors = [
-                "No pedestrian involvement - primary LOW-severity indicator",
+                "No pedestrian involvement — primary LOW-severity indicator",
                 "Incident probability below dispatch threshold"
             ]
 
-    # Weather display label
+    # Weather display label — for UI only, not model input
     weather_display = {
         'Raining'    : 'Rain',
         'Cloudy'     : 'Cloudy',
