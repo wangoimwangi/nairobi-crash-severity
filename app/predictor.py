@@ -135,9 +135,9 @@ def _clinical_override(collision_type, vehicle_type, num_vehicles,
 
     When multiple extreme HIGH-severity signals are simultaneously
     present, the combination is unambiguously HIGH regardless of
-    the model probability. This mirrors real-world clinical triage
-    practice (Manchester Triage System, SALT triage) where hard
-    override criteria exist alongside scoring models.
+    the model probability. Mirrors real-world clinical triage practice
+    (Manchester Triage System, SALT triage) where hard override
+    criteria exist alongside scoring models.
 
     Override fires when ALL of the following are true:
       - High-energy collision: Rollover or Head-on
@@ -342,6 +342,10 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         clinical_high.append(
             "Overtaking manoeuvre — elevated frontal collision risk"
         )
+    if cause_of_accident == 'Mechanical failure':
+        clinical_high.append(
+            "Mechanical failure — vehicle defect increases unpredictability of incident"
+        )
 
     # LOW-signal clinical inputs
     if collision_type == 'Rear-end':
@@ -358,36 +362,36 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         )
     elif num_casualties <= 2 and not pedestrian_involved:
         clinical_low.append(
-            f"{num_casualties} casualty - within single BLS unit response capacity"
+            f"{num_casualties} casualty — within single BLS unit response capacity"
         )
     if num_vehicles == 1:
         clinical_low.append(
-            "Single vehicle - contained incident, no multi-vehicle energy transfer"
+            "Single vehicle — contained incident, no multi-vehicle energy transfer"
         )
     if vehicle_type == 'Car/Saloon':
         clinical_low.append(
-            "Passenger car - standard crumple zone and restraint systems present"
+            "Passenger car — standard crumple zone and restraint systems present"
         )
     if cause_of_accident == 'Unknown':
         clinical_low.append(
-            "Cause unconfirmed - no high-energy trigger reported by caller"
+            "Cause unconfirmed — no high-energy trigger reported by caller"
         )
     if not pedestrian_involved:
         clinical_low.append(
-            "No pedestrian involvement - all parties have vehicle protection"
+            "No pedestrian involvement — all parties have vehicle protection"
         )
 
     # Contextual signals
     if temporal['Is_night']:
         contextual.append(
-            "Night-time - reduced visibility elevates injury severity risk"
+            "Night-time — reduced visibility elevates injury severity risk"
         )
     if temporal['Is_rush_hour']:
         contextual.append(
-            "Rush hour - high traffic density increases multi-vehicle risk"
+            "Rush hour — high traffic density increases multi-vehicle risk"
         )
     if current_weather == 'Raining':
-        contextual.append("Rain - reduced road grip and stopping distance")
+        contextual.append("Rain — reduced road grip and stopping distance")
     elif current_weather == 'Fog or mist':
         contextual.append("Fog — severely reduced visibility at scene")
 
@@ -403,25 +407,27 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             else:
                 risk_factors = (clinical_high + contextual)[:3]
         else:
-            # No single dominant HIGH signal — model or override classified
-            # HIGH from combined pattern. Show what IS present specifically.
+            # No single dominant HIGH signal — build from what IS present
             present = []
+            if cause_of_accident not in ['Unknown']:
+                present.append(
+                    f"{cause_of_accident} — contributes to elevated severity profile"
+                )
             present.append(
-                f"{collision_type} collision — combined incident pattern exceeds threshold"
-            )
-            present.append(
-                f"{vehicle_type} involved — vehicle type contributes to severity profile"
+                f"{collision_type} — incident pattern exceeds LOW threshold"
             )
             if contextual:
                 present.extend(contextual)
-            risk_factors = present[:3]
+            risk_factors = present[:3] if present else [
+                "Combined incident pattern exceeds LOW severity threshold"
+            ]
     else:
         # LOW — only show LOW factors, never HIGH signals
         if clinical_low:
             risk_factors = (clinical_low + contextual)[:3]
         else:
             risk_factors = [
-                "No pedestrian involvement — primary LOW-severity indicator",
+                "No pedestrian involvement - primary LOW-severity indicator",
                 "Incident probability below dispatch threshold"
             ]
 
