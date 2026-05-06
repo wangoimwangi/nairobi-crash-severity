@@ -154,14 +154,14 @@ def _clinical_override(collision_type, vehicle_type, num_vehicles,
     return is_high_energy and is_heavy_vehicle and is_mass_casualty and is_multi_vehicle
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def get_weather(nairobi_area: str = "Other/Unknown") -> str:
     """
     Fetch live weather for display in the info bar only.
     Weather is NOT passed to the model — the model always uses
     'Normal' as the weather feature to ensure classification
     stability regardless of API reliability.
-    Cached 5 minutes per area. Falls back to Normal if unavailable.
+    Cached 1 minute per area. Falls back to Normal if unavailable.
     """
     lat, lon = AREA_COORDINATES.get(nairobi_area, (-1.2921, 36.8219))
     url = (
@@ -173,14 +173,13 @@ def get_weather(nairobi_area: str = "Other/Unknown") -> str:
     try:
         response = requests.get(url, timeout=5)
         data     = response.json()
-        precip   = data['current']['precipitation']
         code     = data['current']['weathercode']
 
         rain_codes  = {51, 53, 55, 61, 63, 65, 80, 81, 82}
         fog_codes   = {45, 48}
-        cloud_codes = {71, 73, 75, 77, 3}
+        cloud_codes = {1, 2, 3, 71, 73, 75, 77}
 
-        if precip > 0 and code in rain_codes:
+        if code in rain_codes:
             return 'Raining'
         elif code in fog_codes:
             return 'Fog or mist'
@@ -386,7 +385,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
         )
 
     # Contextual signals — time only, not weather
-    # Weather is displayed in the UI but not used in classification
     if temporal['Is_night']:
         contextual.append(
             "Night-time — reduced visibility elevates injury severity risk"
