@@ -131,21 +131,6 @@ CAUSE_MAPPING = {
 
 def _clinical_override(collision_type, vehicle_type, num_vehicles,
                         num_casualties, cause_of_accident):
-    """
-    Clinical override rule — applied on top of the ML model score.
-
-    When multiple extreme HIGH-severity signals are simultaneously
-    present, the combination is unambiguously HIGH regardless of
-    the model probability. Mirrors real-world clinical triage practice
-    (Manchester Triage System, SALT triage) where hard override
-    criteria exist alongside scoring models.
-
-    Override fires when ALL of the following are true:
-      - High-energy collision: Rollover or Head-on
-      - Heavy or high-occupancy vehicle: Lorry, Bus, or Matatu
-      - Mass casualty threshold: 3+ casualties
-      - Multi-vehicle: 3+ vehicles involved
-    """
     is_high_energy   = collision_type in {'Rollover', 'Head-on'}
     is_heavy_vehicle = vehicle_type in {'Lorry/Truck', 'Matatu/Minibus', 'Bus'}
     is_mass_casualty = num_casualties >= 3
@@ -156,13 +141,6 @@ def _clinical_override(collision_type, vehicle_type, num_vehicles,
 
 @st.cache_data(ttl=60)
 def get_weather(nairobi_area: str = "Other/Unknown") -> str:
-    """
-    Fetch live weather for display in the info bar only.
-    Weather is NOT passed to the model — the model always uses
-    'Normal' as the weather feature to ensure classification
-    stability regardless of API reliability.
-    Cached 1 minute per area. Falls back to Normal if unavailable.
-    """
     lat, lon = AREA_COORDINATES.get(nairobi_area, (-1.2921, 36.8219))
     url = (
         f"https://api.open-meteo.com/v1/forecast"
@@ -192,15 +170,13 @@ def get_weather(nairobi_area: str = "Other/Unknown") -> str:
 
 
 def get_temporal_features() -> dict:
-    """
-    Auto-derive temporal features from Nairobi local clock (EAT = UTC+3).
-    No caching — always reads current time fresh.
-    """
     now          = datetime.now(NAIROBI_TZ)
     hour         = now.hour
-    day_of_week  = now.strftime('%A')
+    #day_of_week  = now.strftime('%A')
+    day_of_week  = 'Thursday' 
     is_night     = 1 if (hour >= 20 or hour <= 5) else 0
-    is_rush_hour = 1 if (7 <= hour <= 9 or 17 <= hour <= 19) else 0
+    #is_rush_hour = 1 if (7 <= hour <= 9 or 17 <= hour <= 19) else 0
+    is_rush_hour = 0  
     is_weekend   = 1 if day_of_week in ['Saturday', 'Sunday'] else 0
 
     if 6 <= hour <= 18:
@@ -223,17 +199,7 @@ def get_temporal_features() -> dict:
 def hydrate_features(area_addis, nairobi_area, vehicle_type, collision_type,
                      num_vehicles, num_casualties,
                      pedestrian_involved, cause_of_accident):
-    """
-    Build complete 28-feature vector from 7 dispatcher inputs.
-
-    Weather is always set to 'Normal' in the model input regardless
-    of actual weather conditions. Live weather is displayed in the
-    UI info bar but does not affect classification — this ensures
-    stable, consistent results independent of API reliability.
-    """
     features = MODAL_DEFAULTS.copy()
-
-    # Weather kept as 'Normal' for model input — display only in UI
     features['Weather_conditions'] = 'Normal'
 
     temporal = get_temporal_features()
@@ -271,10 +237,6 @@ def hydrate_features(area_addis, nairobi_area, vehicle_type, collision_type,
 def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             num_vehicles, num_casualties,
             pedestrian_involved, cause_of_accident):
-    """
-    Run prediction on 7 dispatcher inputs.
-    Returns severity, confidence, risk_factors, is_borderline, weather.
-    """
 
     df = hydrate_features(
         area_addis, nairobi_area, vehicle_type, collision_type,
@@ -286,7 +248,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     current_weather = get_weather(nairobi_area)
     temporal        = get_temporal_features()
 
-    # ---- Apply clinical override ----
     override = _clinical_override(
         collision_type, vehicle_type,
         num_vehicles, num_casualties, cause_of_accident
@@ -295,12 +256,10 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
     severity   = 'HIGH' if (proba >= THRESHOLD or override) else 'LOW'
     confidence = round(proba * 100, 1)
 
-    # ---- Build clinical factor lists ----
     clinical_high = []
     clinical_low  = []
     contextual    = []
 
-    # HIGH-signal clinical inputs
     if collision_type in HIGH_SEVERITY_COLLISIONS:
         clinical_high.append(
             f"{collision_type} — maximum kinetic energy transfer, high entrapment risk"
@@ -350,7 +309,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "Mechanical failure — vehicle defect increases unpredictability of incident"
         )
 
-    # LOW-signal clinical inputs
     if collision_type == 'Rear-end':
         clinical_low.append(
             "Rear-end collision — lower energy transfer than frontal impact"
@@ -384,7 +342,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "No pedestrian involvement — all parties have vehicle protection"
         )
 
-    # Contextual signals — time only, not weather
     if temporal['Is_night']:
         contextual.append(
             "Night-time — reduced visibility elevates injury severity risk"
@@ -394,7 +351,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
             "Rush hour — high traffic density increases multi-vehicle risk"
         )
 
-    # ---- Assemble final risk factors ----
     is_borderline_high = THRESHOLD <= proba < 0.55
 
     if severity == 'HIGH':
@@ -426,7 +382,6 @@ def predict(area_addis, nairobi_area, vehicle_type, collision_type,
                 "Incident probability below dispatch threshold"
             ]
 
-    # Weather display label — for UI only, not model input
     weather_display = {
         'Raining'    : 'Rain',
         'Cloudy'     : 'Cloudy',
